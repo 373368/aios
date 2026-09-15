@@ -23,11 +23,14 @@ import re
 import sys
 from datetime import datetime
 
-VAULT = r"D:\ObsidianVault"
-KB_ROOT = os.path.join(VAULT, r"05-知识\知识库")
-MEM_ROOT = os.path.join(VAULT, r"01-记忆")
-LOG_ROOT = os.path.join(VAULT, r"03-日志")
-BEHAVIOR_DIR = os.path.join(LOG_ROOT, "行为记录")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths as _paths  # noqa: E402
+
+VAULT = _paths.VAULT
+KB_ROOT = _paths.KB_ROOT
+MEM_ROOT = _paths.MEM_VAULT_ROOT
+LOG_ROOT = _paths.LOGS
+BEHAVIOR_DIR = _paths.BEHAVIOR_DIR
 
 SKELETONS = ("AI与机器学习", "编程开发", "数学", "计算机基础", "物理",
              "医疗", "学习", "生活", "娱乐", "学术前沿")
@@ -290,9 +293,9 @@ def append_digest_log(summary, completed=False, day=None, log_root=LOG_ROOT):
 
 # ── 原语：C1-C3 落盘（锚点 / permission / skill） ───────────────────────
 
-SKILLS_ROOT = r"D:\AI OS\skills\custom"
-AGENTS_PATH = r"D:\AI OS\l1-control\opencode\AGENTS.md"
-OPENCODE_CONFIG = r"C:\Users\asus\.config\opencode\opencode.jsonc"
+SKILLS_ROOT = _paths.SKILLS_ROOT
+AGENTS_PATH = _paths.AGENTS_PATH
+OPENCODE_CONFIG = _paths.OPENCODE_CONFIG
 
 
 def append_anchor(clause, agents_path=AGENTS_PATH):
@@ -392,7 +395,7 @@ def write_permission(rules, config_path=OPENCODE_CONFIG):
 
 # ── 原语：list_memory（扫描待沉淀记忆） ─────────────────────────────────
 
-MEM_SCAN_ROOT = r"D:\AI OS\l1-control\opencode\.opencode\memory"
+MEM_SCAN_ROOT = _paths.MEMORY
 
 
 def list_memory(mem_root=MEM_SCAN_ROOT, include_digested=False):

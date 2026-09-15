@@ -23,7 +23,7 @@ description: 每周知识统计周报。汇总 7 天内的行为记录与沉淀�
 ### 2. 数据采集
 - **沉淀量**：统计 `05-知识/` 近 7 天新增/修改的笔记数（frontmatter updated 或 mtime）
 - **行为记录**：读 `05-知识/行为记录/` 近 7 天条目（触发方式/耗时/读取的笔记）
-- **记忆流动**：`D:\AI OS\l1-control\opencode\.opencode\memory\` 中被 `digested` 标记但今天仍在的项数（=待归档存量）
+- **记忆流动**：`<repo>\l1-control\opencode\.opencode\memory\` 中被 `digested` 标记但今天仍在的项数（=待归档存量）
 - **待办**：当前 active 待办快照（来自 memory + vault 02-任务）
 
 ### 3. 对比长期事项

@@ -7,7 +7,7 @@ description: AI 对话归档与知识提炼。将 export/ 下未提炼的对话�
 
 ## 目标
 
-把 `D:\AI OS\l2-memory\export\<平台>\` 下**未提炼**的对话会话，提炼为**独立知识页**写入 `05-知识/知识库/`。每知识一页，同主题双链。原始对话留在 export/（工程中间态，不进 vault）。
+把 `<repo>\l2-memory\export\<平台>\` 下**未提炼**的对话会话，提炼为**独立知识页**写入 `05-知识/知识库/`。每知识一页，同主题双链。原始对话留在 export/（工程中间态，不进 vault）。
 
 ## 输入与去重
 
@@ -20,7 +20,7 @@ description: AI 对话归档与知识提炼。将 export/ 下未提炼的对话�
   # 建知识库 id 集合（frontmatter conversation_id ∪ 来源段会话 id）→ 逐 export 文件读 frontmatter 比对
   import os, re
   have = set()
-  for r, d, fs in os.walk(r'D:\ObsidianVault\05-知识\知识库'):
+  for r, d, fs in os.walk(r'<vault>\05-知识\知识库'):
       for fn in fs:
           if not fn.endswith('.md'): continue
           t = open(os.path.join(r,fn), encoding='utf-8').read(20000)
@@ -29,7 +29,7 @@ description: AI 对话归档与知识提炼。将 export/ 下未提炼的对话�
           for m in re.finditer(r'会话[：:]\s*(?:.+?)\s*\((\d+|[0-9a-f-]{8,})\)', t):
               have.add(m.group(1).strip())
   for plat in ['豆包','DeepSeek','元宝']:
-      d = os.path.join(r'D:\AI OS\l2-memory\export', plat)
+      d = os.path.join(r'<repo>\l2-memory\export', plat)
       missed = []
       for f in os.listdir(d):
           if not f.endswith('.md'): continue
@@ -42,11 +42,11 @@ description: AI 对话归档与知识提炼。将 export/ 下未提炼的对话�
 
 ### 0. 分片（先决步骤，仅超大会话）
 对 `export/<平台>/` 下 `>60KB` 的会话，先运行分片器（幂等，已分片自动跳过）：
-`python D:\AI OS\l2-memory\tasks\chunk_sessions.py`
+`python <repo>\l2-memory\tasks\chunk_sessions.py`
 分片落在 `chunks/<平台>/`。后续提炼以**切片**为单位（`export` 原文件若已分片则不再单独提炼）。
 
 ### 1. 列出待归档会话
-扫描 `export/<平台>/` + `chunks/<平台>/` 全部 .md，比对知识库已有 `conversation_id`，得出未提炼清单。输出：`共 N 个待归档（平台 X）`。命令：`python D:\AI OS\l2-memory\tasks\scan_new.py --json`
+扫描 `export/<平台>/` + `chunks/<平台>/` 全部 .md，比对知识库已有 `conversation_id`，得出未提炼清单。输出：`共 N 个待归档（平台 X）`。命令：`python <repo>\l2-memory\tasks\scan_new.py --json`
 
 ### 2. 逐会话提炼（每知识一页）
 对每个待归档会话：
@@ -56,7 +56,7 @@ description: AI 对话归档与知识提炼。将 export/ 下未提炼的对话�
 
 ### 3. 写入知识库
 每条知识一页，路径 `05-知识/知识库/<骨架>/<子目录>/<主题>.md`：
-- **用原语库落盘**：`python D:\AI OS\l2-memory\scripts\primitives.py` 的 `write_kb_page(title, skeleton, subdir, frontmatter, body)`（from primitives import write_kb_page）——frontmatter 序列化、路径解析、骨架白名单兜底、原子写、幂等跳过由函数保证，**不要手写文件格式**
+- **用原语库落盘**：`python <repo>\l2-memory\scripts\primitives.py` 的 `write_kb_page(title, skeleton, subdir, frontmatter, body)`（from primitives import write_kb_page）——frontmatter 序列化、路径解析、骨架白名单兜底、原子写、幂等跳过由函数保证，**不要手写文件格式**
 - 骨架/子目录：按主题归入现有 9 骨架（AI与机器学习/编程开发/数学/计算机基础/物理/医疗/学习/生活/娱乐）及子目录；无合适子目录则放骨架顶层
 - **frontmatter**：`source`(doubao/deepseek/yuanbao) + `conversation_id`(原会话 id) + `exported_at` + `tags`
 - **正文结构**：`## 核心知识`（干货要点）→ `## 要点速记`（条目化）→ `## 来源`（平台/会话）
@@ -67,7 +67,7 @@ description: AI 对话归档与知识提炼。将 export/ 下未提炼的对话�
 用原语库 `append_behavior_log(category="归档", line="平台:<平台> 对话:<id> 提炼知识:<条数> 触发:<手动/自动>")` 追加（`03-日志/行为记录/YYYY-MM-DD.md`，幂等去重）。
 
 ### 5. 刷新语义索引（沉淀即索引）
-- 执行 `python D:\AI OS\l2-memory\scripts\build_index.py`（增量，只 embed 新增页）
+- 执行 `python <repo>\l2-memory\scripts\build_index.py`（增量，只 embed 新增页）
 - 失败不阻断：记录到日志，下次重试（幂等）
 
 ## 产物

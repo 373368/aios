@@ -20,11 +20,11 @@ description: 知识沉淀与归档机制。完成待办/会话收尾时立即执
 
 ### 1. 扫描待归档源
 检查这些临时位置是否有"已完成、不再变化"的内容：
-- `D:\AI OS\l1-control\opencode\.opencode\memory\` 下 `status: active` 的待办结果
+- `<repo>\l1-control\opencode\.opencode\memory\` 下 `status: active` 的待办结果
 - `00-收件箱/` 下的笔记
 - 会话中形成但未归档的结论
 
-> **注意：`D:\AI OS\l1-control\opencode\.opencode\memory\TODO.md` 是永久待办文件，永不过期、永不被 digest**。其中的事项只标记 `[x]`（done），前不加 `[ ]`，绝不允许重命名为 `.digested.md` 或删除。
+> **注意：`<repo>\l1-control\opencode\.opencode\memory\TODO.md` 是永久待办文件，永不过期、永不被 digest**。其中的事项只标记 `[x]`（done），前不加 `[ ]`，绝不允许重命名为 `.digested.md` 或删除。
 
 ### 2. 逐条判定归属（按分类规则）
 对每个候选项问：**"是领域知识 / 有价值的会话工作记忆 / 仍在进行的待办？"**
@@ -41,7 +41,7 @@ description: 知识沉淀与归档机制。完成待办/会话收尾时立即执
 ### 3. 去重与链接
 - 写知识前先 search 现有的（mcpvault search / grep），避免重复条目
 - 归档时补 frontmatter（created/updated/type/topic）+ 相关双链
-- **用原语库落盘**：`from primitives import write_kb_page, write_memory_page`（`D:\AI OS\l2-memory\scripts\primitives.py`）——领域知识页走 `write_kb_page`，01-记忆 页走 `write_memory_page`（自动 type: memory），格式/幂等/原子写由函数保证
+- **用原语库落盘**：`from primitives import write_kb_page, write_memory_page`（`<repo>\l2-memory\scripts\primitives.py`）——领域知识页走 `write_kb_page`，01-记忆 页走 `write_memory_page`（自动 type: memory），格式/幂等/原子写由函数保证
 
 ### 4. 清理临时源
 - memory 中已沉淀项：用原语库 `mark_digested(path)` 重命名为 `<原名>.digested.md`（文件内容不动，不删除原文，留轨迹）。重命名即标记：/recall 只看文件名即可跳过，无需逐个读文件内容省 token
@@ -52,10 +52,10 @@ description: 知识沉淀与归档机制。完成待办/会话收尾时立即执
 
 ### 6. 刷新语义索引（沉淀即索引）
 沉淀写入 `05-知识/知识库/`、`01-记忆/` 后，必须同步刷新语义索引，否则检索结果滞后（build_index.py 已含 01-记忆 扫描源，前缀区分 05-知识/01-记忆/06-系统）：
-- 执行：`python D:\AI OS\l2-memory\scripts\build_index.py`
+- 执行：`python <repo>\l2-memory\scripts\build_index.py`
 - **增量模式**（默认）：sha 比对，只 embed 新增/变更页，未变页零 API 调用，秒级
 - **强制全量**：`--full`（embedder 模型/维度变更时用）
-- key 从 `D:\AI OS\l2-memory\config.json` 读（已配置，无需操作）
+- key 从 `<repo>\l2-memory\config.json` 读（已配置，无需操作）
 - 失败不阻断：索引刷新失败仅记录到 digest 日志，下次 digest 会重试（幂等）
 
 ## 中断恢复（关键）

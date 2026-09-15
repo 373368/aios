@@ -23,9 +23,10 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from embedders import load_config, make_embedder
 from rerank import make_reranker
+import paths as _paths
 
-INDEX_BASE = r"D:\AI OS\l2-memory\index"
-BEHAVIOR_DIR = r"D:\ObsidianVault\03-日志\行为记录"
+INDEX_BASE = _paths.INDEX_DIR
+BEHAVIOR_DIR = _paths.BEHAVIOR_DIR
 
 
 def load_index(kind):

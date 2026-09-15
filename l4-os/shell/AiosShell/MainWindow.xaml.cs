@@ -23,8 +23,8 @@ public partial class MainWindow : Window
     private const int ChatPort = 8767;            // loopx Chat 服务端口（/api/* 写通道）
     private const int OpencodePort = 4400;        // opencode serve（顶栏 Chat 面板，iframe 直连）
     private const int OpenSciencePort = 4401;     // OpenScience serve（顶栏 Chat 面板可选 agent）
-    private const string RuntimeRoot = @"D:\AI OS\.loopx-runtime";
-    private const string PythonExe = @"C:\Users\asus\AppData\Local\Programs\Python\Python312\python.exe";
+    private static readonly string RuntimeRoot = Paths.RuntimeRoot;
+    private static readonly string PythonExe = Paths.Python;
     private readonly List<Process> _children = new();
     private HttpListener? _listener;
     private string _distRoot = "";
@@ -93,10 +93,9 @@ public partial class MainWindow : Window
     private async void StartChatServer()
     {
         if (await PortIsListeningAsync(ChatPort)) return;
-        const string ChatScript = @"D:\AI OS\l4-os\scripts\serve_chat.py";
         var psi = new ProcessStartInfo(PythonExe)
         {
-            ArgumentList = { ChatScript },
+            ArgumentList = { Paths.ChatScript },
             WindowStyle = ProcessWindowStyle.Hidden,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -125,7 +124,7 @@ public partial class MainWindow : Window
     private async void StartOpencodeServer()
     {
         if (await PortIsListeningAsync(OpencodePort)) return;
-        var psi = new ProcessStartInfo(@"C:\Program Files\nodejs\node_global\node_modules\opencode-ai\bin\opencode.exe")
+        var psi = new ProcessStartInfo(Paths.OpencodeExe)
         {
             ArgumentList = { "serve", "--port", OpencodePort.ToString(), "--hostname", "127.0.0.1" },
             WindowStyle = ProcessWindowStyle.Hidden,
@@ -146,11 +145,9 @@ public partial class MainWindow : Window
     private async void StartOpenScienceServer()
     {
         if (await PortIsListeningAsync(OpenSciencePort)) return;
-        const string NodeExe = @"C:\Program Files\nodejs\node.exe";
-        const string OpenScienceJs = @"C:\Program Files\nodejs\node_global\node_modules\@synsci\openscience\bin\openscience";
-        var psi = new ProcessStartInfo(NodeExe)
+        var psi = new ProcessStartInfo(Paths.Node)
         {
-            ArgumentList = { OpenScienceJs, "serve", "--port", OpenSciencePort.ToString() },
+            ArgumentList = { Paths.OpenScienceJs, "serve", "--port", OpenSciencePort.ToString() },
             WindowStyle = ProcessWindowStyle.Hidden,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -171,7 +168,7 @@ public partial class MainWindow : Window
         var local = Path.Combine(AppContext.BaseDirectory, "dashboard-dist");
         _distRoot = Directory.Exists(Path.Combine(local, "index.html"))
             ? local
-            : @"D:\AI OS\l4-os\dashboard\dist";
+            : Paths.DashboardDist;
 
         _listener = new HttpListener();
         _listener.Prefixes.Add($"http://127.0.0.1:{_webPort}/");
@@ -395,12 +392,9 @@ public partial class MainWindow : Window
     /// <summary>星空背景数据：调 build_graph_data.py 扫 vault 输出 graph JSON</summary>
     private static async Task ServeGraphDataAsync(HttpListenerContext ctx)
     {
-        const string BuildGraphDataPy = @"D:\AI OS\l4-os\scripts\build_graph_data.py";
-        const string VaultDir = @"D:\ObsidianVault";
-
-        var psi = new ProcessStartInfo("python")
+        var psi = new ProcessStartInfo(Paths.Python)
         {
-            ArgumentList = { BuildGraphDataPy, VaultDir },
+            ArgumentList = { Paths.BuildGraphDataPy, Paths.Vault },
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
@@ -434,15 +428,12 @@ public partial class MainWindow : Window
     /// <summary>wfctl 代理：调 wfctl.py 暴露 list/render/status/trigger 四接口给前端</summary>
     private static async Task ServeWfctlAsync(HttpListenerContext ctx)
     {
-        const string WfctlPy = @"D:\AI OS\l2-memory\workflows\wfctl.py";
-        const string PythonExe = @"C:\Users\asus\AppData\Local\Programs\Python\Python312\python.exe";
-
         var path = ctx.Request.Url?.AbsolutePath ?? "";
         string? sub = null;
         if (path.StartsWith("/wfctl/", StringComparison.OrdinalIgnoreCase))
             sub = path.Substring("/wfctl/".Length);
 
-        var args = new List<string> { WfctlPy };
+        var args = new List<string> { Paths.WfctlPy };
         var name = ctx.Request.QueryString["name"];
 
         if (sub is "trigger" || sub is "render" || sub is "status")
@@ -521,10 +512,6 @@ public partial class MainWindow : Window
     /// </summary>
     private static async Task ServeLoopxControlAsync(HttpListenerContext ctx, string kind, string path)
     {
-        const string LoopxCmd = @"C:\Users\asus\AppData\Local\Programs\Python\Python312\Scripts\loopx.exe";
-        const string ProjectDir = @"D:\AI OS";
-
-        // 解析 /goal/start 之类：kind + sub 拼成 loopx 命令
         var sub = path.Substring($"/{kind}/".Length).Trim('/');
         var args = new List<string>();
         if (kind == "goal" && sub == "start")
@@ -533,7 +520,7 @@ public partial class MainWindow : Window
             if (string.IsNullOrEmpty(text)) { await JsonErrorAsync(ctx, "缺 text 参数"); return; }
             args.Add("start-goal");
             args.Add("--guided");
-            args.Add("--project"); args.Add(ProjectDir);
+            args.Add("--project"); args.Add(Paths.Root);
             args.Add("--host-surface"); args.Add("other-agent");
             args.Add("--goal-text"); args.Add(text!);
         }
@@ -580,9 +567,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        var psi = new ProcessStartInfo(LoopxCmd)
+        var psi = new ProcessStartInfo(Paths.LoopxCmd)
         {
-            WorkingDirectory = ProjectDir,
+            WorkingDirectory = Paths.Root,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,

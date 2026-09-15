@@ -34,8 +34,11 @@ import os
 import re
 import sys
 
-SYS_DIR = r"D:\ObsidianVault\06-系统"
-OUT_PATH = r"D:\AI OS\l2-memory\eval-harness\cache\sys_classify_report.json"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths as _paths  # noqa: E402
+
+SYS_DIR = _paths.SYS_DIR
+OUT_PATH = os.path.join(_paths.LOGS, "sys_classify_report.json")
 MODEL = __import__("modelz").load_models().get("default", "")  # 当前会话 model（复用本机配置单源）
 
 # ── 判据词表（唯一判据源，可拔插：改这里 = 换判据，逻辑全自动跟随） ─────

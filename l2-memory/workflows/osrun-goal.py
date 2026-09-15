@@ -20,10 +20,13 @@ import sys
 import time
 import os
 
-LOOPX = r"C:\Users\asus\AppData\Local\Programs\Python\Python312\Scripts\loopx.exe"
-RUNTIME_ROOT = r"D:\AI OS\.loopx-runtime"
-REGISTRY = r"D:\AI OS\.loopx\registry.json"
-OSRUN = r"D:\AI OS\l2-memory\workflows\osrun.py"
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+import paths as _paths  # noqa: E402
+
+LOOPX = _paths.LOOPX_EXE or "loopx"
+RUNTIME_ROOT = os.path.join(_paths.ROOT, ".loopx-runtime")
+REGISTRY = os.path.join(_paths.ROOT, ".loopx", "registry.json")
+OSRUN = os.path.join(_paths.L2_DIR, "workflows", "osrun.py")
 GOAL = "ai-os-goal"
 AGENT = "openscience"
 PY = sys.executable

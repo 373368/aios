@@ -26,8 +26,11 @@ if getattr(sys.stderr, "reconfigure", None):
     sys.stderr.reconfigure(encoding="utf-8")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LOG_DIR = r"D:\ObsidianVault\03-日志"
-PYTHON = r"C:\Users\asus\AppData\Local\Programs\Python\Python312\python.exe"
+sys.path.insert(0, os.path.join(HERE, "..", "scripts"))
+import paths as _paths  # noqa: E402
+
+LOG_DIR = _paths.LOGS
+PYTHON = _paths.PYTHON_EXE or sys.executable
 WFENGINE = os.path.join(HERE, "wfengine.py")
 
 

@@ -19,9 +19,13 @@
 import argparse
 import os
 import re
+import sys
 
-EXPORT = r"D:\AI OS\l2-memory\export"
-CHUNKS = r"D:\AI OS\l2-memory\chunks"
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+import paths as _paths  # noqa: E402
+
+EXPORT = _paths.EXPORT_DIR
+CHUNKS = _paths.CHUNKS_DIR
 PLATFORMS = ["豆包", "DeepSeek", "元宝"]
 DEFAULT_MAX_BYTES = 60 * 1024
 

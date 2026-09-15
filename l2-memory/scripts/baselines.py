@@ -19,8 +19,9 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from embedders import load_config, make_embedder
+import paths as _paths
 
-INDEX_DIR = r"D:\AI OS\l2-memory\index"
+INDEX_DIR = _paths.INDEX_DIR
 random.seed(42)
 
 # ─── 分词工具 ──────────────────────────────────────────────────────────

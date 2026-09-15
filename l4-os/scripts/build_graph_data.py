@@ -13,7 +13,7 @@ import re
 import sys
 import time
 
-# AI-OS vault controlled tag vocabulary（按 D:\ObsidianVault 高频标签定制）：
+# vault controlled tag vocabulary（按实际 vault 高频标签定制）：
 # 精确匹配已 lowercase 的 tag。中文标签直接原样匹配（lowercase 不变）。
 TAG_COLORS = [
     # 索引/MOC — 亮白

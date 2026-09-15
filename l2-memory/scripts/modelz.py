@@ -36,14 +36,18 @@ import base64
 import json
 import os
 import subprocess
+import sys
 import time
 import urllib.request
 import urllib.error
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths as _paths  # noqa: E402
+
 SERVER_PORT = int(os.environ.get("OPENCODE_SERVER_PORT", "4399"))
 SERVER_USER = os.environ.get("OPENCODE_SERVER_USERNAME", "opencode")
 SERVER_PASS = os.environ.get("OPENCODE_SERVER_PASSWORD", "")
-OPENCODE_EXE = r"C:\Program Files\nodejs\node_global\node_modules\opencode-ai\bin\opencode.exe"
+OPENCODE_EXE = _paths.OPENCODE_EXE or ""
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config.json")
 
@@ -215,10 +219,11 @@ def ensure_server(timeout=60):
     if _server_healthy(SERVER_PORT):
         return SERVER_PORT
     if not os.path.exists(OPENCODE_EXE):
-        raise ValueError(f"找不到 opencode 可执行文件: {OPENCODE_EXE}")
+        raise ValueError(f"找不到 opencode 可执行文件: {OPENCODE_EXE or '（未配置）'}"
+                         f"——可用环境变量 MEMCORE_OPENCODE_EXE 或 config.json paths.opencode_exe 配置")
     subprocess.Popen([OPENCODE_EXE, "serve", "--port", str(SERVER_PORT)],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     creationflags=subprocess.CREATE_NO_WINDOW)
+                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     deadline = time.time() + timeout
     while time.time() < deadline:
         if _server_healthy(SERVER_PORT):

@@ -16,9 +16,12 @@ import os
 import re
 import sys
 
-KB = r"D:\ObsidianVault\05-知识\知识库"
-EXPORT = r"D:\AI OS\l2-memory\export"
-CHUNKS = r"D:\AI OS\l2-memory\chunks"
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+import paths as _paths  # noqa: E402
+
+KB = _paths.KB_ROOT
+EXPORT = _paths.EXPORT_DIR
+CHUNKS = _paths.CHUNKS_DIR
 PLATFORMS = ["豆包", "DeepSeek", "元宝"]
 ALIASES = {"doubao": "豆包", "deepseek": "DeepSeek", "yuanbao": "元宝"}
 

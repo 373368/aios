@@ -18,24 +18,24 @@ AI-OS 运行治理的**约定面**（TODO #12）。把「特定场景多原语�
 
 | 组件 | 路径 |
 |---|---|
-| 引擎 | `D:\AI OS\l2-memory\workflows\wfengine.py` |
-| 工作流 YAML | `D:\AI OS\l2-memory\workflows\*.yaml` |
-| 判断点 prompt | `D:\AI OS\l2-memory\workflows\prompts\*_judge.txt` |
-| 写操作原语库 | `D:\AI OS\l2-memory\scripts\primitives.py` |
-| 模型适配 | `D:\AI OS\l2-memory\scripts\modelz.py`（default=DeepSeek-V4-Flash，judge_default 判断点专用） |
-| SDK 公共层 | `D:\AI OS\l2-memory\sdk\common.py`（run_py/log/锁/退出码） |
+| 引擎 | `<repo>\l2-memory\workflows\wfengine.py` |
+| 工作流 YAML | `<repo>\l2-memory\workflows\*.yaml` |
+| 判断点 prompt | `<repo>\l2-memory\workflows\prompts\*_judge.txt` |
+| 写操作原语库 | `<repo>\l2-memory\scripts\primitives.py` |
+| 模型适配 | `<repo>\l2-memory\scripts\modelz.py`（default=DeepSeek-V4-Flash，judge_default 判断点专用） |
+| SDK 公共层 | `<repo>\l2-memory\sdk\common.py`（run_py/log/锁/退出码） |
 
 ## 执行命令
 
 ```powershell
-python D:\AI OS\l2-memory\workflows\wfengine.py <workflow.yaml> [key=value ...]
+python <repo>\l2-memory\workflows\wfengine.py <workflow.yaml> [key=value ...]
 ```
 
 - **archive-daily**（对话提炼归档）：`... archive-daily.yaml source=doubao`（source 支持英文别名 doubao/deepseek/yuanbao，scan_new 内部映射平台目录；导出需在浏览器/油猴前置完成）
 - **digest-daily**（记忆沉淀）：`... digest-daily.yaml`（**预览用 `dry_run=true`**，拦截全部写/标记动作，只跑判断）
 - **track-daily**（学术追踪）：`... track-daily.yaml source=arxiv query="cat:cs.AI"`（source=arxiv/github/journal）
 
-退出码 0=成功；运行日志追加 `D:\ObsidianVault\03-日志\wfengine.log` 与 `<工作流名>.log`。
+退出码 0=成功；运行日志追加 `<vault>\03-日志\wfengine.log` 与 `<工作流名>.log`。
 
 ## 工作流 Schema
 

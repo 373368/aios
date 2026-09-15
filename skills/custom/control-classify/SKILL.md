@@ -21,10 +21,10 @@ description: 06-系统 控制知识 C1-C6 分类固化（sys_classify_sdk 机械
 
 ## 执行流程
 
-1. **初判（原语）**：`python D:\AI OS\l2-memory\scripts\sys_classify_sdk.py`（全量 06-系统）或 `<某页.md>`（单页）。输出 `D:\AI OS\l2-memory\eval-harness\cache\sys_classify_report.json`。
+1. **初判（原语）**：`python <repo>\l2-memory\scripts\sys_classify_sdk.py`（全量 06-系统）或 `<某页.md>`（单页）。输出 `<repo>\l2-memory\eval-harness\cache\sys_classify_report.json`。
 2. **精判（LLM）**：SDK 初判只是候选（verdict=candidate），LLM 复核分类与抽取结果再定稿。
 3. **落盘（按类路由）**：
-   - C1 → 合并进 `D:\AI OS\l1-control\opencode\AGENTS.md`（锚点短句，不删旧）
+   - C1 → 合并进 `<repo>\l1-control\opencode\AGENTS.md`（锚点短句，不删旧）
    - C2 → 可 permission 化的条款 → 用 `write_permission` 原语写入全局 opencode.jsonc（插入顺序：broad 规则在前，narrow deny 在后）；不可 permission 化（heredoc/油猴目录类）→ 留检查点，注明「文档+skill 面」
    - C3 → 情境触发的写新 skill（走 skill-creator）；机械动作已在 declarative-workflows 等既有 skill 的，并入其流程段
    - C4/C5 → 页面保持 06-系统 索引，验证 `search_index.py` 可命中
@@ -33,8 +33,8 @@ description: 06-系统 控制知识 C1-C6 分类固化（sys_classify_sdk 机械
 
 ## 验证
 
-- 回归：`python D:\AI OS\l2-memory\scripts\test_sys_classify.py`（6 标签钉住，标签变更多半是判据词变了）
-- 检索可达：`python D:\AI OS\l2-memory\scripts\search_index.py "<规则关键词>" --k 3` 命中对应 06-系统 页（可加 `--rerank` 启用 Qwen3-Reranker 重排，默认关闭）
+- 回归：`python <repo>\l2-memory\scripts\test_sys_classify.py`（6 标签钉住，标签变更多半是判据词变了）
+- 检索可达：`python <repo>\l2-memory\scripts\search_index.py "<规则关键词>" --k 3` 命中对应 06-系统 页（可加 `--rerank` 启用 Qwen3-Reranker 重排，默认关闭）
 - 配置合法：permission 写入后剥注释 json.loads 校验（参考 declarative-workflows skill 的坑）；改动配置需重启 opencode 生效
 
 ## 约束

@@ -28,10 +28,13 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+import paths as _paths  # noqa: E402
+
 DEFAULT_PORT = 4096
 
-NODE = "node"
-OPENSCIENCE_JS = r"C:\Program Files\nodejs\node_global\node_modules\@synsci\openscience\bin\openscience"
+NODE = _paths.NODE_EXE or "node"
+OPENSCIENCE_JS = _paths.OPENSCIENCE_JS or "openscience"
 
 def _openscience_cmd() -> list[str]:
     # Prefer node + the package JS entry (reliable across shells/PATH).

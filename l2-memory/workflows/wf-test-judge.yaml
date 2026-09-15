@@ -1,13 +1,13 @@
 kind: Workflow
 metadata:
   name: wf-test-judge
-  description: archive_judge 判断点单测
+  description: digest_judge 判断点单测
 variables:
   content: "我们讨论了一种符号推理方法，结合神经网络和符号逻辑提升推理准确率，值得在项目中尝试。这个方法核心是把符号规则编码进神经网络的损失函数。"
 actions:
   - kind: InvokeLLM
     id: judge
-    prompt_template: archive_judge
+    prompt_template: digest_judge
     input: =Local.content
     json_output: true
     output:

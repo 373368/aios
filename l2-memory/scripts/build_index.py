@@ -28,16 +28,17 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths as _paths  # noqa: E402
 from embedders import load_config, make_embedder
 
-VAULT_KB = r"D:\ObsidianVault\05-知识\知识库"
-INDEX_BASE = r"D:\AI OS\l2-memory\index"
+VAULT_KB = _paths.KB_ROOT
+INDEX_BASE = _paths.INDEX_DIR
 # 多源扫描：领域知识 + 个人记忆（01-记忆：个人经历/会话结论，L1 语义检索必达）
 # + 控制知识（06-系统 全量纳入，L0/L2 注入类可检索无害）
 SCAN_ROOTS = [
     (VAULT_KB, "05-知识"),
-    (r"D:\ObsidianVault\01-记忆", "01-记忆"),
-    (r"D:\ObsidianVault\06-系统", "06-系统"),
+    (_paths.MEM_VAULT_ROOT, "01-记忆"),
+    (_paths.SYS_DIR, "06-系统"),
 ]
 
 # frontmatter: --- 到 --- 之间；来源段: ## 来源 之后

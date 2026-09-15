@@ -8,9 +8,10 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sys_classify_sdk import classify, extract_harden, _page_filter
+import paths as _paths  # noqa: E402
+from sys_classify_sdk import classify, extract_harden, _page_filter  # noqa: E402
 
-SYS = r"D:\ObsidianVault\06-系统"
+SYS = _paths.SYS_DIR
 
 
 def read(name):

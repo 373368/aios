@@ -16,10 +16,13 @@ ROOT = os.path.dirname(os.path.abspath(__file__))          # sdk/
 L2 = os.path.dirname(ROOT)                                  # l2-memory/
 SCRIPTS = os.path.join(L2, "scripts")
 TASKS = os.path.join(L2, "tasks")
-LOG_DIR = r"D:\ObsidianVault\03-日志"
 
-PYTHON = r"C:\Users\asus\AppData\Local\Programs\Python\Python312\python.exe"
-NODE = r"C:\Program Files\nodejs\node.exe"
+sys.path.insert(0, SCRIPTS)
+import paths as _paths  # noqa: E402
+
+LOG_DIR = _paths.LOGS
+PYTHON = _paths.PYTHON_EXE or sys.executable
+NODE = _paths.NODE_EXE or "node"
 
 
 def log(name, msg):
