@@ -1,0 +1,94 @@
+# 声明式工作流 schema（对齐微软 Agent Framework Declarative Workflows 1.0 范式）
+# 私有 AI-OS 三层：workflow.yaml（编排声明）→ 原语执行 → LLM 判断点经 modelz
+# 链路：记忆沉淀（memory → 01-记忆/05-知识/待办跳过 → 落盘 → mark_digested → 索引）
+# 用法：python workflows\wfengine.py workflows\digest-daily.yaml
+# 与 archive/track 并列，作为记忆管理工作流（01-记忆 入口）
+
+kind: Workflow
+metadata:
+  name: digest-daily
+  description: 记忆沉淀 扫描→判断归属→落盘→标记→索引 全链路
+  version: 1.0
+
+trigger:
+  kind: OnCommand
+  command: digest
+
+actions:
+  # 1) 扫描待沉淀记忆（未 digested，跳过 TODO.md）
+  - kind: InvokePrimitive
+    id: scan_memory
+    via: primitives
+    primitive: list_memory
+    args:
+      mem_root: =System.MemRoot
+    output: =Local.MemItems
+
+  # 2) 逐条判断归属 + 落盘
+  - kind: Loop
+    id: process_memory
+    over: =Local.MemItems
+    actions:
+      # LLM 判断点：memory/kb/todo 三分支
+      - kind: InvokeLLM
+        id: judge_item
+        model: =System.JudgeModel
+        prompt_template: digest_judge
+        input: =Loop.Item
+        json_output: true
+        output: =Local.Verdict
+
+# 分支处理
+  # dry_run=true 时跳过全部写/标记动作（只跑判断，供预览）
+  - kind: ConditionGroup
+    id: route_by_verdict
+    conditions:
+      - when: =Local.Verdict.branch == "memory"
+        actions:
+          - kind: InvokePrimitive
+            id: write_mem
+            when: =System.Args.dry_run != "true"
+            via: primitives
+            primitive: write_memory_page
+            args:
+              topic: =Local.Verdict.topic
+              content: =Local.Verdict.content
+              mem_root: =System.MemVaultRoot
+      - when: =Local.Verdict.branch == "kb"
+        actions:
+          - kind: InvokePrimitive
+            id: write_kb
+            when: =System.Args.dry_run != "true"
+            via: primitives
+            primitive: write_kb_page
+            args:
+              title: =Local.Verdict.topic
+              skeleton: =Local.Verdict.skeleton
+              subdir: =Local.Verdict.subdir
+              body: =Local.Verdict.content
+      # todo → 不落盘，直接跳过（无动作）
+
+  # 已处理（memory/kb 均落盘；todo 也标记，避免反复判断）
+  - kind: InvokePrimitive
+    id: mark_processed
+    when: =System.Args.dry_run != "true"
+    via: primitives
+    primitive: mark_digested
+    args:
+      path: =Loop.Item.path
+
+  # 3) 重建索引
+  - kind: InvokePrimitive
+    id: build_index
+    when: =System.Args.dry_run != "true"
+    primitive: build_index
+
+  # 4) 行为记录
+  - kind: InvokePrimitive
+    id: log_behavior
+    when: =System.Args.dry_run != "true"
+    via: primitives
+    primitive: append_behavior_log
+    args:
+      category: 沉淀
+      line: digest_daily 完成

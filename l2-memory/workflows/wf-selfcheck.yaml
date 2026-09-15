@@ -1,0 +1,56 @@
+kind: Workflow
+metadata:
+  name: wf-selfcheck
+  description: 引擎自检：表达式/循环/分支/原语/LLM
+  version: 1.0
+
+trigger:
+  kind: OnCommand
+  command: wf-selfcheck
+
+variables:
+  threshold: 3
+  items:
+    - name: a
+      score: 5
+    - name: b
+      score: 1
+    - name: c
+      score: 4
+
+actions:
+  - kind: Loop
+    id: check_all
+    over: =Local.items
+    actions:
+      - kind: ConditionGroup
+        id: route
+        conditions:
+          - when: "=Loop.Item.score >= 3"
+            actions:
+              - kind: InvokePrimitive
+                id: pass_item
+                primitive: wfprobe
+                args:
+                  pass: =Loop.Item.name
+          - when: "=Loop.Item.score < 3"
+            actions:
+              - kind: InvokePrimitive
+                id: fail_item
+                primitive: wfprobe
+                args:
+                  fail: =Loop.Item.name
+
+  - kind: InvokeLLM
+    id: judge
+    model: =System.DefaultModel
+    prompt: "只回复两个字：通过"
+    output:
+      verdict: Local.Verdict
+
+  - kind: InvokePrimitive
+    id: final
+    primitive: wfprobe
+    args:
+      verdict: =Local.Verdict
+      dry_run: =System.Args.dry_run

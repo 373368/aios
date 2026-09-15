@@ -1,0 +1,46 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 4399,
+    "username": "opencode",
+    "password": "CHANGE_ME"
+  },
+  "embedding": {
+    "api_key": "YOUR_XFYUN_MaaS_APIKEY",
+    "kind": "qwen",
+    "base": "https://maas-api.cn-huabei-1.xf-yun.com/v2/embeddings",
+    "model": "xop3qwen8bembedding",
+    "batch_size": 10,
+    "ollama_model": "Qwen3-Embedding-8B:latest",
+    "ollama_base": "http://localhost:11434"
+  },
+  "rerank": {
+    "api_key": "YOUR_XFYUN_MaaS_APIKEY",
+    "base": "https://maas-api.cn-huabei-1.xf-yun.com/v2/rerank",
+    "model": "xop3qwen8breranker"
+  },
+  "models": {
+    "default": "opencode/siliconflow-cn/deepseek-ai/DeepSeek-V4-Flash",
+    "judge_default": "siliconflow-cn/deepseek-ai/DeepSeek-V4-Flash",
+    "providers": {
+      "volcengine-agent-plan": {
+        "name": "Volcano Engine（Responses/chat completions API）",
+        "base": "https://ark.cn-beijing.volces.com/api/plan/v3",
+        "api_key": "YOUR_ARK_API_KEY",
+        "models": ["deepseek-v4-flash", "deepseek-v4-pro", "glm-5.3", "glm-latest", "kimi-k2.7-code", "kimi-k3", "minimax-m3", "doubao-seed-2.1-turbo"]
+      },
+      "opencode": {
+        "name": "本地 opencode server（复用本机 opencode.jsonc 全部 provider）",
+        "kind": "opencode",
+        "models": ["siliconflow-cn/deepseek-ai/DeepSeek-V4-Flash"]
+      },
+      "siliconflow-cn": {
+        "name": "硅基流动（判断点纯 LLM 直调）",
+        "kind": "openai",
+        "base": "https://api.siliconflow.cn/v1",
+        "api_key": "YOUR_SILICONFLOW_API_KEY",
+        "models": ["deepseek-ai/DeepSeek-V4-Flash", "deepseek-ai/DeepSeek-V4-Pro", "zai-org/GLM-5.2"]
+      }
+    }
+  }
+}

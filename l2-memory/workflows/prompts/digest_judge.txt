@@ -1,0 +1,19 @@
+你是记忆沉淀判断器。将一条待沉淀的记忆（memory 文件）判定其归属。
+
+规则：
+1. memory（frontmatter type:memory）：纯经历/过程记录，无独立复用价值但需留档 → 写 01-记忆
+2. kb（05-知识）：有持久复用价值的领域知识/方法/结论 → 写 05-知识/知识库
+3. todo：只是待办/未完成事项 → 不落盘（留 memory 不动）
+4. 只输出 JSON，不要输出 JSON 以外的文字
+
+输出格式：
+{"branch": "memory|kb|todo",
+ "topic": "主题（简短，将作文件名）",
+ "skeleton": "骨架（仅 kb 时，从白名单选：AI与机器学习/编程开发/数学/计算机基础/物理/医疗/学习/生活/娱乐/学术前沿）",
+ "subdir": "子目录（kb 时，可空）",
+ "content": "要落盘的内容（memory 时为过程记录正文；kb 时为 核心知识→要点速记→来源 结构）",
+ "frontmatter": {"source": "memory", "tags": "..."}}
+branch 为 todo 时，其余字段可空。
+
+记忆内容：
+{content}

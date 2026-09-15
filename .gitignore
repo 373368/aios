@@ -1,0 +1,73 @@
+# ── 敏感：密钥与配置 ──────────────────────────────
+l2-memory/config.json
+**/.env
+**/.env.*
+!**/.env.example
+
+# ── 运行时 / 环境 ──────────────────────────────
+**/node_modules/
+**/.venv/
+**/__pycache__/
+*.pyc
+dist/
+build/
+
+# ── 浏览器登录态 / 缓存（第三方 profile，含个人数据）──
+l3-tools/pw-profile/
+l1-control/opencode/.opencode/pw-profile/
+
+# ── opencode 工作区运行时 ──────────────────────
+l1-control/opencode/.opencode/memory/
+l1-control/opencode/.opencode/node_modules/
+l1-control/opencode/.opencode/tools_old/
+l1-control/opencode/.opencode/goals/
+l1-control/opencode/.playwright-mcp/
+
+# ── 根点目录：运行时状态（工具各自管理，不入库）──
+/.codex/
+/.loopx/
+/.loopx-runtime/
+/.opencode/
+/.local/
+
+# ── agents 数据区（OpenScience 运行时数据，不入库）──
+/agents/
+
+# ── 语义索引生成物 / 原始数据 ──────────────────
+l2-memory/index/
+l2-memory/light/
+l2-memory/export/
+l2-memory/chunks/
+l2-memory/logs/
+
+# ── 评估缓存（可再生成）────────────────────────
+l2-memory/archive/
+
+# ── 本地网关（第三方项目，单独管理）────────────
+OmniRoute/
+
+# ── 构建/日志 ────────────────────────────────
+*.log
+
+# ── 嵌套仓库原 gitignore 规则（取消嵌套后保留）──
+# wps-skills：私有文档/接口文档/脚本/日志/测试
+l3-tools/wps-skills/docs/
+l3-tools/wps-skills/WPS接口API/
+l3-tools/wps-skills/scripts/
+l3-tools/wps-skills/logs/
+l3-tools/wps-skills/**/tests/
+l3-tools/wps-skills/**/test/
+l3-tools/wps-skills/CLAUDE.md
+l3-tools/wps-skills/CHANGELOG.md
+l3-tools/wps-skills/.claude
+l3-tools/wps-skills/.spec-workflow
+
+# ponytail：promptfoo 评估产物 / 一次性宣传图 / 本地设置
+l1-control/ponytail/.promptfoo/
+l1-control/ponytail/benchmarks/output*
+l1-control/ponytail/benchmarks/benchmark-local-results.json
+l1-control/ponytail/benchmarks/agentic/runs/
+l1-control/ponytail/announce-*.png
+l1-control/ponytail/changelog-*.png
+l1-control/ponytail/ponytail-*.gif
+l1-control/ponytail/.claude/settings.local.json
