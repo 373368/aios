@@ -14,6 +14,8 @@ AI-OS 运行治理的**约定面**。把「特定场景多原语编排」写成 
 - **工作流**：YAML 声明式多原语编排（本 skill），由 wfengine 执行，管锁/日志/退出码
 - **LLM 判断点**：只做判断（价值/主题/分类/分支），经 `modelz.chat` 直调判断模型，结果决定工作流分支
 
+载体选型：新工作流默认 YAML 声明式；ps1/py 编排壳仅在需要原生进程控制（细粒度锁/平台 API）时保留。
+
 ## 文件位置
 
 | 组件 | 路径 |
@@ -34,7 +36,7 @@ python <repo>\l2-memory\workflows\wfengine.py <workflow.yaml> [key=value ...]
 - **digest-daily**（记忆沉淀）：`... digest-daily.yaml`（**预览用 `dry_run=true`**，拦截全部写/标记动作，只跑判断）
 - 自带冒烟示例：`wf-selfcheck.yaml`（引擎自检）/ `wf-test-judge.yaml`（判断点单测）/ `wf-test-source.yaml`（自定义 API 源 + `$ENV` key 引用）
 
-退出码 0=成功；运行日志追加 `<vault>\03-日志\wfengine.log` 与 `<工作流名>.log`。
+**契约**：统一入口（触发器只认 `wfengine.py <yaml> [k=v]`）+ 退出码 0=成功 / 非 0=失败 + 运行日志追加 `<vault>\03-日志\wfengine.log` 与 `<工作流名>.log`。并发防重入用 `common.SingleLock`（`main_entry` 封装，锁冲突退出码 3）。
 
 ## 工作流 Schema
 
@@ -87,6 +89,20 @@ actions:                                       # 顺序执行；每个动作可�
 
 `output` 捕获：`=Local.X` 简写直接存；`{var: expr}` 字典按表达式映射。原语 stdout 为 JSON 时自动解析（`args.json: true` 或 `via: primitives`）。
 
+## 原语扩展约定
+
+新增原语（确定性能力单元）必须满足：
+
+1. **接口**：命名 `<动词>_<对象>`；单入口（CLI 或库函数，宿主无关）；入参出参结构化（JSON 可描述）
+2. **幂等**：重复执行不产生副作用；写入类必须可安全重跑
+3. **可测试**：附自检/回归（非平凡逻辑留一个可运行检查）
+4. **配置注入**：provider/model/key 走 config/环境变量，不写死
+5. **可拔插**：可变面独立成数据表（如分类判据表），改动不动核心逻辑
+6. **注册**：进 `primitives.py` CLI 分发表；跨 ≥2 工作流复用的才提取为独立原语
+7. **失败可见**：异常不静默（写错误日志），批量场景单条隔离不杀全量
+
+现有原语速览：`scripts/primitives.py`（写 KB/记忆/日志/skill/permission）+ `scripts/`（索引/检索/分类 SDK）+ `tasks/`（扫描/切片/fetch_*，stdout JSON）。
+
 ## 判断点规范
 
 - prompt 模板存 `workflows/prompts/<name>_judge.txt`，末尾用 `{content}` 占位输入
@@ -95,6 +111,19 @@ actions:                                       # 顺序执行；每个动作可�
 - 骨架白名单必须与 `primitives.py` 的 SKELETONS 一致（AI与机器学习/编程开发/数学/计算机基础/物理/医疗/学习/生活/娱乐/学术前沿）
 
 现有判断点：`digest_judge`（memory|kb|todo）。
+
+## 工作流发现与触发（wfctl）
+
+`l2-memory/workflows/wfctl.py` 是面向 agent / UI 的统一桥接：
+
+| 接口 | 命令 | 输出 |
+|---|---|---|
+| 发现 | `python wfctl.py list` | 扫描 `workflows/*.yaml` 编目（name/description/version/command/args/path） |
+| 监控 | `python wfctl.py status <wf>` | 读运行日志判状态（state/last/lines） |
+| 渲染 | `python wfctl.py render <wf>` | 结构化状态 JSON（给 UI） |
+| 触发 | `python wfctl.py trigger <wf> <k=v...>` | 调 wfengine 同步执行，透传退出码 |
+
+agent 使用路径：`list` 发现 → `status`/`render` 监控 → `trigger` 触发。
 
 ## 新增工作流流程
 
