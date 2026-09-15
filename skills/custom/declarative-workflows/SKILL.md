@@ -45,6 +45,13 @@ metadata: {name, description, version}
 trigger: {kind: OnCommand, command: archive}   # 声明入口（当前统一 OnCommand）
 variables:                                     # 顶部变量，可被 actions 引用
   source: =System.Args.source
+model: =System.Args.model   # 可选：本工作流默认 LLM 源（缺省 =System.JudgeModel）
+sources:                    # 可选：自定义 API 源（合并进 config.json models.providers；同名逐字段覆盖）
+  my-source:
+    kind: openai            # openai 直调 | opencode 经本地 server
+    base: https://api.example.com/v1
+    api_key: $ENV:MY_API_KEY  # 只接受 $ENV:VAR 引用（工作流文件可共享/入库，禁明文）
+    models: [model-a]
 actions:                                       # 顺序执行；每个动作可带 when / id
   - kind: ...
 ```
@@ -54,7 +61,7 @@ actions:                                       # 顺序执行；每个动作可�
 | kind | 作用 | 关键字段 |
 |---|---|---|
 | `InvokePrimitive` | 调原语（确定性执行） | `primitive`（原语名）、`args`（JSON）、可选 `via: primitives`、`output` |
-| `InvokeLLM` | LLM 判断点 | `prompt_template`（prompts/<名>.txt，`{content}` 注入 `input`）、`model`（缺省 =System.JudgeModel）、`json_output: true`、`output` |
+| `InvokeLLM` | LLM 判断点 | `prompt_template`（prompts/<名>.txt，`{content}` 注入 `input`）、`model`（缺省 =System.WorkflowModel→JudgeModel）、`json_output: true`、`output` |
 | `ConditionGroup` | 分支路由 | `conditions: [{when, actions:[...]}]`，首个命中执行并 break |
 | `Loop` | 遍历 | `over`（列表表达式）、`actions`；当前项 = `=Loop.Item` |
 | `SetVariable` | 写局部变量 | `var`、`value`（支持 `{var}` 内嵌 + =引用求值） |
@@ -63,7 +70,7 @@ actions:                                       # 顺序执行；每个动作可�
 
 ## 表达式（= 前缀，对齐 Power Fx）
 
-- **作用域**：`=System.Args.<k>`（CLI 参数）/ `=System.JudgeModel`、`=System.DefaultModel`、`=System.MemRoot`、`=System.MemVaultRoot`、`=System.KbRoot` / `=Local.<var>`（动作间变量）/ `=Loop.Item`、`=Loop.Item.<field>`、`=Loop.Item[<i>]`
+- **作用域**：`=System.Args.<k>`（CLI 参数）/ `=System.JudgeModel`、`=System.DefaultModel`、`=System.WorkflowModel`（工作流级默认 LLM 源，由顶层 `model:` 覆盖）、`=System.MemRoot`、`=System.MemVaultRoot`、`=System.KbRoot` / `=Local.<var>`（动作间变量）/ `=Loop.Item`、`=Loop.Item.<field>`、`=Loop.Item[<i>]`
 - **比较运算**：`=Local.Verdict.branch == "new"`（== != >= <= > <，右侧引号字符串或数字）→ 布尔
 - **内嵌替换**：`{LocalVar}` 在 primitive 名/路径等字符串字段中被替换为局部变量值（反斜杠转 `/`）
 - **字面量**：不以 = 开头的字符串原样传递
@@ -96,13 +103,14 @@ actions:                                       # 顺序执行；每个动作可�
 2. 写 YAML：复用 `InvokePrimitive / InvokeLLM / ConditionGroup / Loop / SetVariable`，参考 archive-daily.yaml 结构
 3. 写判断点 prompt 模板（`prompts/<name>_judge.txt`，输出 JSON 含 branch）
 4. 新原语时：实现 → 幂等 → 附自检/回归 → 注册进 `primitives.py` CLI 分发表 → 登记 `12-规范 §2 原语目录`
-5. 验证：先用 `dry_run` 或小样本跑通；参考 `wf-selfcheck.yaml` / `wf-test-judge.yaml`
+5. 验证：先用 `dry_run` 或小样本跑通；参考 `wf-selfcheck.yaml` / `wf-test-judge.yaml` / `wf-test-source.yaml`（自定义 API 源 + $ENV key 引用）
 6. 更新 `13-系统现状` 工作流面 + `12-规范` 映射
 
 ## 坑（来自实测）
 
 - **PowerShell 给 python CLI 传 JSON 引号转义必炸**（JSONDecodeError）→ 引擎内 subprocess 传 argv 数组无此问题；**手动验证用 python 直接 import 调函数**，别拼命令行 JSON
 - **dry_run 拦截**：写/标记原语必须带 `when: =System.Args.dry_run != "true"`（digest-daily 已示范），否则预览即真写
+- **工作流 YAML 禁明文 api_key**：`sources.*.api_key` 只接受 `$ENV:VAR_NAME` 引用（加载时 validate_yaml_sources 拦截明文）；密钥放环境变量或本机 config.json（.gitignore 已排除）。非本地 openai 源缺 key → resolve 直接报错
 - 中文乱码是 PowerShell 控制台显示问题，脚本输出字节是 UTF-8，以 `sys.stdout.reconfigure(encoding="utf-8")` 后为准
 
 ## 验收

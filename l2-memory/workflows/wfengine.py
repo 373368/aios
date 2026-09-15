@@ -15,7 +15,7 @@ import yaml
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sdk"))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 from common import log, run_py, default_ref, judge_ref  # noqa: E402
-from modelz import chat  # noqa: E402
+from modelz import chat, validate_yaml_sources  # noqa: E402
 
 WORKFLOWS = os.path.dirname(os.path.abspath(__file__))
 PROMPTS = os.path.join(WORKFLOWS, "prompts")
@@ -30,11 +30,14 @@ class Scope:
 
     def __init__(self, args):
         import primitives as P
-        self.system = {"Args": args, "DefaultModel": default_ref(), "JudgeModel": judge_ref(),
+        jr = judge_ref()
+        self.system = {"Args": args, "DefaultModel": default_ref(), "JudgeModel": jr,
+                       "WorkflowModel": jr,
                        "MemRoot": P.MEM_SCAN_ROOT, "MemVaultRoot": P.MEM_ROOT,
                        "KbRoot": P.KB_ROOT}
         self.local = {}
         self.loop = []
+        self.sources = {}
 
     def eval(self, expr):
         """求值表达式：=引用 / 字面量。表达式支持 a.b 属性、[i] 索引、比较运算。
@@ -201,8 +204,9 @@ def run_action(scope, act):
                 prompt = prompt.replace("{content}", str(inp))
         else:
             prompt = str(scope.eval(act.get("prompt", "")))
-        model = scope.eval(act.get("model")) or scope.system["JudgeModel"]
-        raw = chat([{"role": "user", "content": prompt}], ref=model, temperature=0.2, timeout=300)
+        model = scope.eval(act.get("model")) or scope.system["WorkflowModel"]
+        raw = chat([{"role": "user", "content": prompt}], ref=model, temperature=0.2,
+                   timeout=300, sources=scope.sources)
         result = raw
         if act.get("json_output"):
             result = _extract_json(raw)
@@ -263,6 +267,11 @@ def run_workflow(wf_path, args):
     if wf.get("kind") != "Workflow":
         raise WFError("不是 Workflow 声明")
     scope = Scope(args)
+    # 工作流级可选配置：sources（自定义 API 源，禁明文 key）/ model（默认 LLM 源）
+    scope.sources = wf.get("sources") or {}
+    validate_yaml_sources(scope.sources)
+    if wf.get("model"):
+        scope.system["WorkflowModel"] = scope.eval(wf["model"]) or scope.system["WorkflowModel"]
     for var, expr in wf.get("variables", {}).items():
         scope.local[var] = scope.eval(expr)
     for act in wf.get("actions", []):

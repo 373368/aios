@@ -14,10 +14,21 @@
 接口契约：
     load_models()            -> dict（config.json 的 models 段）
     list_refs()              -> ["provider/model", ...]
-    resolve(ref=None)        -> {provider, model, base, api_key, kind}（ref 缺省 = default）
-    chat(messages, ref=None, **kw) -> str（按 kind 分派：openai 直调 / opencode 经 serve）
-    request_headers(ref=None)-> dict（复用 resolve，供其它脚本取鉴权头；仅 openai 来源有意义）
+    resolve(ref=None, sources=None) -> {provider, model, base, api_key, kind}（ref 缺省 = default）
+    chat(messages, ref=None, sources=None, **kw) -> str（按 kind 分派：openai 直调 / opencode 经 serve）
+    request_headers(ref=None, sources=None) -> dict（复用 resolve，供其它脚本取鉴权头）
+    validate_yaml_sources(sources) -> None（工作流 YAML sources 段校验，禁明文 key）
     ensure_server()          -> port（确保本地 opencode server 常驻，未启动则拉起）
+
+密钥处理（开源友好）：
+    api_key 支持 "$ENV:VAR_NAME" 间接引用（调用时解析环境变量；未设置 → ValueError 不静默）。
+    工作流 YAML 的 sources 段禁止明文 key（文件可共享/入库），由 validate_yaml_sources 强制；
+    本机 config.json 已被 .gitignore 排除，可继续写明文。
+    非本地 openai 源（非 127.0.0.1/localhost）缺 key → resolve 即报错；本地源免鉴权直连。
+
+工作流自定义源（可选配置）：
+    resolve/chat 接受 sources={provider: {...}}，逐字段合并进 config.json providers
+    （同名 = 覆盖，未写字段 = 继承），实现"用默认源 或 工作流自带新源"。
 
 幂等 / 可测试：纯解析无副作用；chat 需网络。自检：python modelz.py（仅离线解析断言）。
 """
@@ -87,11 +98,52 @@ def list_refs():
     return out
 
 
-def resolve(ref=None):
+def _resolve_key(provider, raw):
+    """api_key 取值：支持 $ENV:VAR_NAME 间接引用（LiteLLM 风格）；缺失 → ValueError（不静默）。"""
+    if isinstance(raw, str) and raw.startswith("$ENV:"):
+        var = raw[len("$ENV:"):].strip()
+        val = os.environ.get(var)
+        if not val:
+            raise ValueError(f"provider {provider} 的 api_key 引用了 $ENV:{var}，但环境变量未设置")
+        return val
+    return raw
+
+
+def _is_local(base):
+    """本地 base（如本机推理服务，免鉴权直连）。"""
+    return bool(base) and base.startswith(("http://127.0.0.1", "http://localhost", "http://[::1]"))
+
+
+def _merged_providers(models, sources=None):
+    """config providers ⊕ 工作流级 sources（同名逐字段覆盖，未写字段继承）。"""
+    providers = dict(models.get("providers") or {})
+    for name, prov in (sources or {}).items():
+        merged = dict(providers.get(name) or {})
+        merged.update(prov or {})
+        providers[name] = merged
+    return providers
+
+
+def validate_yaml_sources(sources):
+    """校验工作流 YAML 的 sources 段：api_key 只接受 $ENV:VAR 引用。
+
+    工作流文件可共享/入库，禁明文 key（密钥放环境变量或本机 config.json）。
+    """
+    for name, prov in (sources or {}).items():
+        key = (prov or {}).get("api_key")
+        if key and not (isinstance(key, str) and key.startswith("$ENV:")):
+            raise ValueError(
+                f"工作流 sources.{name}.api_key 禁止明文（工作流文件可共享/入库），"
+                f"请改用 $ENV:VAR_NAME 引用环境变量")
+
+
+def resolve(ref=None, sources=None):
     """解析 "provider/model" 引用 → 连接信息。ref=None 用 default。
 
     出参：{provider, model, base, api_key, kind}。找不到 → ValueError（不静默）。
     kind 来自 provider 配置（缺省 "openai"）。
+    sources：可选工作流级自定义 provider（合并进 config providers，同名逐字段覆盖）。
+    api_key：支持 $ENV:VAR 引用；非本地 openai 源缺 key → ValueError。
     """
     models = load_models()
     ref = ref or models.get("default")
@@ -100,15 +152,20 @@ def resolve(ref=None):
     if "/" not in ref:
         raise ValueError(f"model 引用必须是 'provider/model' 格式，收到: {ref}")
     provider, model = ref.split("/", 1)
-    prov = (models.get("providers") or {}).get(provider)
+    providers = _merged_providers(models, sources)
+    prov = providers.get(provider)
     if not prov:
-        raise ValueError(f"未知 provider: {provider}（可选 {list(models.get('providers') or {})}）")
+        raise ValueError(f"未知 provider: {provider}（可选 {list(providers)}）")
     if model not in prov.get("models", []):
         raise ValueError(f"provider {provider} 无模型 {model}（可选 {prov.get('models')}）")
-    return {"provider": provider, "model": model,
-            "base": prov["base"].rstrip("/") if prov.get("base") else "",
-            "api_key": prov.get("api_key"),
-            "kind": prov.get("kind", "openai")}
+    kind = prov.get("kind", "openai")
+    base = prov["base"].rstrip("/") if prov.get("base") else ""
+    key = _resolve_key(provider, prov.get("api_key"))
+    if kind == "openai" and not base:
+        raise ValueError(f"provider {provider}（kind=openai）缺 base")
+    if kind == "openai" and not key and not _is_local(base):
+        raise ValueError(f"provider {provider} 缺 api_key（非本地源必须配置，或用 $ENV:VAR_NAME 引用环境变量）")
+    return {"provider": provider, "model": model, "base": base, "api_key": key, "kind": kind}
 
 
 def _chat_openai(info, messages, temperature, max_tokens, timeout):
@@ -121,7 +178,8 @@ def _chat_openai(info, messages, temperature, max_tokens, timeout):
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("Content-Type", "application/json")
-    req.add_header("Authorization", "Bearer " + info["api_key"])
+    if info.get("api_key"):
+        req.add_header("Authorization", "Bearer " + info["api_key"])
     for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -218,26 +276,29 @@ def _chat_opencode(messages, model_ref, timeout=300):
     raise TimeoutError(f"opencode server 在 {timeout}s 内未返回 LLM 回复（session {sid}）")
 
 
-def chat(messages, ref=None, temperature=None, max_tokens=None, timeout=300):
+def chat(messages, ref=None, temperature=None, max_tokens=None, timeout=300, sources=None):
     """LLM 调用（按来源 kind 分派）。messages: [{"role":..., "content":...}]
 
     出参：assistant 文本。
       openai   -> 直调 base/chat/completions，重试 3 次
       opencode -> 经本地 opencode server（session + prompt_async + 轮询）
+    sources：可选工作流级自定义 provider（透传 resolve）。
     """
-    info = resolve(ref)
+    info = resolve(ref, sources=sources)
     if info["kind"] == "opencode":
         return _chat_opencode(messages, info["model"], timeout=timeout)
     return _chat_openai(info, messages, temperature, max_tokens, timeout)
 
 
-def request_headers(ref=None):
+def request_headers(ref=None, sources=None):
     """复用 resolve 返回鉴权头（供其它脚本直接发请求）。仅 openai 来源有意义。"""
-    info = resolve(ref)
+    info = resolve(ref, sources=sources)
     if info["kind"] != "openai":
         raise ValueError(f"request_headers 仅支持 openai 来源，收到 kind={info['kind']}")
-    return {"Content-Type": "application/json",
-            "Authorization": "Bearer " + info["api_key"]}
+    headers = {"Content-Type": "application/json"}
+    if info.get("api_key"):
+        headers["Authorization"] = "Bearer " + info["api_key"]
+    return headers
 
 
 def _self_check():
@@ -256,7 +317,43 @@ def _self_check():
         raise AssertionError("未知 provider 未抛错")
     except ValueError:
         pass
-    print(f"OK: modelz 自检通过 | default={m['default']} | refs={len(refs)} 个 | 来源 kinds 存在")
+    # $ENV: 间接引用 + sources 合并（离线）
+    os.environ["MODELZ_TEST_KEY"] = "test-secret-12345678"
+    try:
+        custom = {"envtest": {"name": "env 引用测试", "kind": "openai",
+                              "base": "https://example.com/v1",
+                              "api_key": "$ENV:MODELZ_TEST_KEY",
+                              "models": ["t1"]}}
+        info2 = resolve("envtest/t1", sources=custom)
+        assert info2["api_key"] == "test-secret-12345678", "$ENV 未解析"
+        # 同名覆盖：只覆盖 api_key，base/models 继承 config
+        pname = m["judge_default"].split("/", 1)[0]
+        ov = resolve(m["judge_default"], sources={pname: {"api_key": "$ENV:MODELZ_TEST_KEY",
+                                                          "base": "https://example.com/v1"}})
+        assert ov["api_key"] == "test-secret-12345678" and ov["base"], "同名 sources 覆盖/继承"
+    finally:
+        os.environ.pop("MODELZ_TEST_KEY", None)
+    try:
+        resolve("envtest/t1", sources={"envtest": {"base": "https://example.com/v1",
+                                                   "api_key": "$ENV:MODELZ_TEST_MISSING",
+                                                   "models": ["t1"]}})
+        raise AssertionError("$ENV 缺环境变量未抛错")
+    except ValueError:
+        pass
+    try:
+        resolve("envtest/t1", sources={"envtest": {"base": "https://example.com/v1",
+                                                   "models": ["t1"]}})
+        raise AssertionError("非本地源缺 api_key 未抛错")
+    except ValueError:
+        pass
+    validate_yaml_sources({"x": {"api_key": "$ENV:ANY"}})  # 合法：不抛
+    try:
+        validate_yaml_sources({"x": {"api_key": "sk-plaintext-12345678"}})
+        raise AssertionError("YAML 明文 key 未拦截")
+    except ValueError:
+        pass
+    print(f"OK: modelz 自检通过 | default={m['default']} | refs={len(refs)} 个 | 来源 kinds 存在"
+          f" | $ENV/sources/明文拦截 已覆盖")
 
 
 if __name__ == "__main__":

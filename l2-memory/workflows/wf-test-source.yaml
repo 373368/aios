@@ -1,0 +1,32 @@
+kind: Workflow
+metadata:
+  name: wf-test-source
+  description: 自定义 API 源（$ENV 引用 key）+ 工作流级 model 端到端冒烟
+  version: 1.0
+
+trigger:
+  kind: OnCommand
+  command: wf-test-source
+
+# 工作流级可选配置：本工作流默认 LLM 源 = 自定义源 sf-test
+model: sf-test/deepseek-v4-flash
+
+sources:
+  sf-test:
+    name: 自定义源测试（key 经 $ENV 引用，YAML 内无明文）
+    kind: openai
+    base: https://ark.cn-beijing.volces.com/api/plan/v3
+    api_key: $ENV:ARK_API_KEY
+    models: [deepseek-v4-flash]
+
+actions:
+  - kind: InvokeLLM
+    id: judge
+    prompt: "只回复两个字：通过"
+    output: verdict
+
+  - kind: InvokePrimitive
+    id: final
+    primitive: wfprobe
+    args:
+      verdict: =Local.verdict

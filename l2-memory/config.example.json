@@ -26,7 +26,7 @@
       "volcengine-agent-plan": {
         "name": "Volcano Engine（Responses/chat completions API）",
         "base": "https://ark.cn-beijing.volces.com/api/plan/v3",
-        "api_key": "YOUR_ARK_API_KEY",
+        "api_key": "$ENV:ARK_API_KEY",
         "models": ["deepseek-v4-flash", "deepseek-v4-pro", "glm-5.3", "glm-latest", "kimi-k2.7-code", "kimi-k3", "minimax-m3", "doubao-seed-2.1-turbo"]
       },
       "opencode": {
@@ -38,7 +38,7 @@
         "name": "硅基流动（判断点纯 LLM 直调）",
         "kind": "openai",
         "base": "https://api.siliconflow.cn/v1",
-        "api_key": "YOUR_SILICONFLOW_API_KEY",
+        "api_key": "$ENV:SILICONFLOW_API_KEY",
         "models": ["deepseek-ai/DeepSeek-V4-Flash", "deepseek-ai/DeepSeek-V4-Pro", "zai-org/GLM-5.2"]
       }
     }
