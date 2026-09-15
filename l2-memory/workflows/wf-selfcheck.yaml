@@ -45,8 +45,7 @@ actions:
     id: judge
     model: =System.DefaultModel
     prompt: "只回复两个字：通过"
-    output:
-      verdict: Local.Verdict
+    output: Verdict
 
   - kind: InvokePrimitive
     id: final

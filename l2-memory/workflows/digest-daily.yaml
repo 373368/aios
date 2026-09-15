@@ -24,7 +24,7 @@ actions:
       mem_root: =System.MemRoot
     output: =Local.MemItems
 
-  # 2) 逐条判断归属 + 落盘
+  # 2) 逐条判断归属 + 落盘 + 标记
   - kind: Loop
     id: process_memory
     over: =Local.MemItems
@@ -38,44 +38,43 @@ actions:
         json_output: true
         output: =Local.Verdict
 
-# 分支处理
-  # dry_run=true 时跳过全部写/标记动作（只跑判断，供预览）
-  - kind: ConditionGroup
-    id: route_by_verdict
-    conditions:
-      - when: =Local.Verdict.branch == "memory"
-        actions:
-          - kind: InvokePrimitive
-            id: write_mem
-            when: =System.Args.dry_run != "true"
-            via: primitives
-            primitive: write_memory_page
-            args:
-              topic: =Local.Verdict.topic
-              content: =Local.Verdict.content
-              mem_root: =System.MemVaultRoot
-      - when: =Local.Verdict.branch == "kb"
-        actions:
-          - kind: InvokePrimitive
-            id: write_kb
-            when: =System.Args.dry_run != "true"
-            via: primitives
-            primitive: write_kb_page
-            args:
-              title: =Local.Verdict.topic
-              skeleton: =Local.Verdict.skeleton
-              subdir: =Local.Verdict.subdir
-              body: =Local.Verdict.content
-      # todo → 不落盘，直接跳过（无动作）
+      # 分支处理（dry_run=true 时跳过全部写动作，只跑判断，供预览）
+      - kind: ConditionGroup
+        id: route_by_verdict
+        conditions:
+          - when: =Local.Verdict.branch == "memory"
+            actions:
+              - kind: InvokePrimitive
+                id: write_mem
+                when: =System.Args.dry_run != "true"
+                via: primitives
+                primitive: write_memory_page
+                args:
+                  topic: =Local.Verdict.topic
+                  content: =Local.Verdict.content
+                  mem_root: =System.MemVaultRoot
+          - when: =Local.Verdict.branch == "kb"
+            actions:
+              - kind: InvokePrimitive
+                id: write_kb
+                when: =System.Args.dry_run != "true"
+                via: primitives
+                primitive: write_kb_page
+                args:
+                  title: =Local.Verdict.topic
+                  skeleton: =Local.Verdict.skeleton
+                  subdir: =Local.Verdict.subdir
+                  body: =Local.Verdict.content
+          # todo → 不落盘，直接跳过（无动作）
 
-  # 已处理（memory/kb 均落盘；todo 也标记，避免反复判断）
-  - kind: InvokePrimitive
-    id: mark_processed
-    when: =System.Args.dry_run != "true"
-    via: primitives
-    primitive: mark_digested
-    args:
-      path: =Loop.Item.path
+      # 已处理（memory/kb 均落盘；todo 也标记，避免反复判断）
+      - kind: InvokePrimitive
+        id: mark_processed
+        when: =System.Args.dry_run != "true"
+        via: primitives
+        primitive: mark_digested
+        args:
+          path: =Loop.Item.path
 
   # 3) 重建索引
   - kind: InvokePrimitive

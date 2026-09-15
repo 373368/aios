@@ -6,9 +6,9 @@
 输出未提炼清单 + 空会话/占位标记，供 kb-archivist 子代理决定提炼对象。
 
 用法：
-  python scan_new.py              # 全平台
-  python scan_new.py 豆包         # 单平台
-  python scan_new.py --json       # 机器可读
+  python scan_new.py                  # 全平台
+  python scan_new.py 豆包             # 单平台（支持英文别名 doubao/deepseek/yuanbao）
+  python scan_new.py --json           # 机器可读（报告键=传入平台名原文）
 """
 import argparse
 import json
@@ -20,6 +20,7 @@ KB = r"D:\ObsidianVault\05-知识\知识库"
 EXPORT = r"D:\AI OS\l2-memory\export"
 CHUNKS = r"D:\AI OS\l2-memory\chunks"
 PLATFORMS = ["豆包", "DeepSeek", "元宝"]
+ALIASES = {"doubao": "豆包", "deepseek": "DeepSeek", "yuanbao": "元宝"}
 
 
 def kb_ids():
@@ -69,10 +70,12 @@ def main():
         args.platform = args.platform_opt
 
     have = kb_ids()
-    plats = [args.platform] if args.platform else PLATFORMS
+    # (报告键, 扫描目录名)：别名映射只影响目录；报告键保留调用方传入原文（工作流表达式按原文取值）
+    pairs = [(args.platform, ALIASES.get(args.platform.lower(), args.platform))] \
+        if args.platform else [(p, p) for p in PLATFORMS]
     report = {}
 
-    for plat in plats:
+    for given, plat in pairs:
         # 已分片集合：chunks/<平台>/ 里出现过的会话 base（原文件不再单独列候选，只处理切片）
         chunk_dir = os.path.join(CHUNKS, plat)
         chunked_bases = set()
@@ -121,7 +124,7 @@ def main():
                     placeholder.append(item)
                 else:
                     missed.append(item)
-        report[plat] = {"candidates": missed, "empty": empty, "placeholder": placeholder}
+        report[given] = {"candidates": missed, "empty": empty, "placeholder": placeholder}
 
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))

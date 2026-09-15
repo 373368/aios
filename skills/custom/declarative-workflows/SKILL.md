@@ -31,7 +31,7 @@ AI-OS 运行治理的**约定面**（TODO #12）。把「特定场景多原语�
 python D:\AI OS\l2-memory\workflows\wfengine.py <workflow.yaml> [key=value ...]
 ```
 
-- **archive-daily**（对话提炼归档）：`... archive-daily.yaml source=doubao`（source 传中文平台名 doubao/deepseek/yuanbao；`skip_export=true` 跳过浏览器下载段）
+- **archive-daily**（对话提炼归档）：`... archive-daily.yaml source=doubao`（source 支持英文别名 doubao/deepseek/yuanbao，scan_new 内部映射平台目录；导出需在浏览器/油猴前置完成）
 - **digest-daily**（记忆沉淀）：`... digest-daily.yaml`（**预览用 `dry_run=true`**，拦截全部写/标记动作，只跑判断）
 - **track-daily**（学术追踪）：`... track-daily.yaml source=arxiv query="cat:cs.AI"`（source=arxiv/github/journal）
 

@@ -1,13 +1,13 @@
 # 声明式工作流 schema（对齐微软 Agent Framework Declarative Workflows 1.0 范式）
 # 私有 AI-OS 三层：workflow.yaml（编排声明）→ 原语执行 → LLM 判断点经 modelz
-# 链路：聊天数据 下载→整理→提炼→入库(四分支)→索引→行为记录
+# 链路：export/ 会话文件（浏览器导出在前置完成） 扫描→提炼→入库(四分支)→索引→行为记录
 # 用法：python workflows\wfengine.py workflows\archive-daily.yaml source=doubao
 
 kind: Workflow
 metadata:
   name: archive-daily
-  description: 聊天数据 下载→整理→提炼→入库→索引 全链路
-  version: 1.1
+  description: 聊天数据 扫描→提炼→入库→索引 全链路
+  version: 1.2
 
 trigger:
   kind: OnCommand
@@ -15,16 +15,9 @@ trigger:
 
 variables:
   source: =System.Args.source
-  skip_export: =System.Args.skip_export
 
 actions:
-  # 1) 下载（可选，默认跳过——导出通常已在浏览器完成；需显式传 source=英文别名触发）
-  - kind: InvokePrimitive
-    id: export_source
-    primitive: export_{source}
-    when: =System.Args.skip_export != "true"
-
-  # 2) 整理：扫描候选（去重游标=知识库 frontmatter conversation_id；source 传中文平台名）
+  # 1) 整理：扫描候选（去重游标=知识库 frontmatter conversation_id；source 支持英文别名，scan_new 映射平台目录）
   - kind: InvokePrimitive
     id: scan_new
     primitive: scan_new
@@ -39,7 +32,7 @@ actions:
     var: Candidates
     value: =Local.ScanReport.{source}.candidates
 
-  # 3) 提炼 + 四分支入库
+  # 2) 提炼 + 四分支入库
   - kind: Loop
     id: process_candidates
     over: =Local.Candidates
@@ -102,12 +95,12 @@ actions:
                   subdir: =Local.Verdict.subdir
                   superseded_by: =Local.Verdict.superseded_by
 
-  # 4) 重建索引
+  # 3) 重建索引
   - kind: InvokePrimitive
     id: build_index
     primitive: build_index
 
-  # 5) 行为记录
+  # 4) 行为记录
   - kind: InvokePrimitive
     id: log_behavior
     via: primitives

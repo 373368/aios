@@ -18,19 +18,20 @@ variables:
   query: =System.Args.query
 
 actions:
-  # 1) 下载（零 LLM 原语）
+  # 1) 下载（零 LLM 原语；json: true = 传 --json 给脚本并解析 stdout JSON）
   - kind: InvokePrimitive
     id: fetch_items
     primitive: fetch_{source}
     args:
       query: =Local.query
+      json: true
     output: =Local.FetchData
 
-  # 提取条目列表
+  # 提取条目列表（fetch_* 契约：{"source": "...", "items": [...]})
   - kind: SetVariable
     id: extract_items
     var: Items
-    value: =Local.FetchData.{source}.items
+    value: =Local.FetchData.items
 
   # 2) 提炼 + 入库
   - kind: Loop

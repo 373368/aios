@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-ARXIV_API = "http://export.arxiv.org/api/query"
+ARXIV_API = "https://export.arxiv.org/api/query"
 NS = {"a": "http://www.w3.org/2005/Atom"}
 
 QUERY = 'cat:cs.AI OR cat:cs.LG OR cat:hep-th OR cat:quant-ph'
@@ -53,6 +53,8 @@ def main():
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--query", default=QUERY)
+    ap.add_argument("--json", action="store_true",
+                    help="兼容 wfengine json 标记（输出始终为 JSON）")
     args = ap.parse_args()
     query = args.query
     try:

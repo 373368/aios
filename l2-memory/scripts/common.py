@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -31,11 +32,36 @@ def log(name, msg):
         pass
 
 
+def _pid_alive(pid):
+    """进程存活探测。Windows 不能用 os.kill(pid, 0)——那是 TerminateProcess（会杀进程）。"""
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        import ctypes
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return False
+        kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
 class SingleLock:
     """跨进程单实例锁（Windows 命名 Mutex 不可跨语言直接用，改用文件锁）。"""
 
     def __init__(self, name):
-        self.path = os.path.join(LOG_DIR, f".lock-{name}")
+        lock_dir = LOG_DIR
+        try:
+            os.makedirs(lock_dir, exist_ok=True)
+        except OSError:
+            lock_dir = tempfile.gettempdir()
+        self.path = os.path.join(lock_dir, f".lock-{name}")
         self.fd = None
 
     def __enter__(self):
@@ -44,14 +70,18 @@ class SingleLock:
             self.fd.write(str(os.getpid()))
             self.fd.flush()
         except FileExistsError:
-            # 锁文件存在：检查持有进程是否存活
+            # 锁文件存在：持有者存活 → 拒绝（False）；死锁文件 → 清理重试
             try:
                 pid = int(open(self.path, encoding="utf-8").read().strip())
-                os.kill(pid, 0)  # 存活则拒绝
-                return False
             except (ValueError, OSError):
-                os.remove(self.path)  # 死锁文件，清理重试
-                return self.__enter__()
+                pid = 0
+            if pid and _pid_alive(pid):
+                return False
+            try:
+                os.remove(self.path)
+            except OSError:
+                pass
+            return self.__enter__()
         return True
 
     def __exit__(self, *a):
@@ -115,12 +145,21 @@ def judge_ref():
 
 
 def main_entry(name, fn):
-    """SDK CLI 统一入口：sys.argv[1:] 传给 fn，锁内执行，退出码规范。"""
+    """SDK CLI 统一入口：sys.argv[1:] 传给 fn，锁内执行，退出码规范。
+
+    退出码：0=成功 / 1=fn 返回 False / 3=已有实例在运行（锁冲突，跳过）。
+    """
     if sys.platform == "win32":
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
-    with SingleLock(name):
+    lock = SingleLock(name)
+    if lock.__enter__() is False:
+        sys.stderr.write(f"[{name}] 已有实例在运行，本次跳过\n")
+        return 3
+    try:
         ok = fn(sys.argv[1:])
-        if ok is False:
-            return 1
-        return 0 if ok is None or ok is True else (1 if ok else 0)
+    finally:
+        lock.__exit__(None, None, None)
+    if ok is False:
+        return 1
+    return 0 if ok is None or ok is True else (1 if ok else 0)

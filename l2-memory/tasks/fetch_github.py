@@ -26,6 +26,8 @@ def main():
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--query", default=QUERY)
+    ap.add_argument("--json", action="store_true",
+                    help="兼容 wfengine json 标记（输出始终为 JSON）")
     args = ap.parse_args()
     q = args.query
     url = API + "?" + urllib.parse.urlencode({"q": q, "per_page": 20, "sort": "stars"})
