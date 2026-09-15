@@ -9,7 +9,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/status.json": {
-        target: "http://127.0.0.1:8766",
+        target: "http://127.0.0.1:8767",
         changeOrigin: false,
       },
       "/ssh-hosts": {
@@ -22,6 +22,14 @@ export default defineConfig({
       },
       "/api/actions": {
         target: "http://127.0.0.1:8767",
+        changeOrigin: false,
+      },
+      "/wfctl": {
+        target: "http://127.0.0.1:8799",
+        changeOrigin: false,
+      },
+      "/graph-data": {
+        target: "http://127.0.0.1:8799",
         changeOrigin: false,
       },
     },
