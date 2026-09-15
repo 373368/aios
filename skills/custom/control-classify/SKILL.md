@@ -21,7 +21,7 @@ description: 06-系统 控制知识 C1-C6 分类固化（sys_classify_sdk 机械
 
 ## 执行流程
 
-1. **初判（原语）**：`python <repo>\l2-memory\scripts\sys_classify_sdk.py`（全量 06-系统）或 `<某页.md>`（单页）。输出 `<repo>\l2-memory\eval-harness\cache\sys_classify_report.json`。
+1. **初判（原语）**：`python <repo>\l2-memory\scripts\sys_classify_sdk.py`（全量 06-系统）或 `<某页.md>`（单页）。报告输出 `<logs>\sys_classify_report.json`（日志目录，`MEMCORE_LOGS` 可覆盖）。
 2. **精判（LLM）**：SDK 初判只是候选（verdict=candidate），LLM 复核分类与抽取结果再定稿。
 3. **落盘（按类路由）**：
    - C1 → 合并进 `<repo>\l1-control\opencode\AGENTS.md`（锚点短句，不删旧）
@@ -29,7 +29,7 @@ description: 06-系统 控制知识 C1-C6 分类固化（sys_classify_sdk 机械
    - C3 → 情境触发的写新 skill（走 skill-creator）；机械动作已在 declarative-workflows 等既有 skill 的，并入其流程段
    - C4/C5 → 页面保持 06-系统 索引，验证 `search_index.py` 可命中
    - C6 → 归 01-记忆
-4. **回写**：更新 `06-系统索引.md` 该页分类标注 + 13-系统现状 消费列。
+4. **回写**：更新 `06-系统索引.md` 该页分类标注。
 
 ## 验证
 
@@ -47,5 +47,5 @@ description: 06-系统 控制知识 C1-C6 分类固化（sys_classify_sdk 机械
 
 - [ ] sys_classify_sdk 单页/全量跑通，报告 JSON 可读（含 run_status/timestamp）
 - [ ] 每条候选经 LLM 精判定稿，落盘载体与分类一一对应
-- [ ] 06-系统索引 分类标注已更新；13-现状 消费列已同步
+- [ ] 06-系统索引 分类标注已更新
 - [ ] 回归测试通过；配置/AGENTS.md 变更幂等无重复

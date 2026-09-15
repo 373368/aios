@@ -3,7 +3,7 @@
 扫描 ai-os/export 下未提炼的对话会话清单。
 
 去重游标 = 知识库 frontmatter conversation_id ∪ 来源段"会话: xxx (id)"。
-输出未提炼清单 + 空会话/占位标记，供 kb-archivist 子代理决定提炼对象。
+输出未提炼清单 + 空会话/占位标记，供提炼子代理决定提炼对象。
 
 用法：
   python scan_new.py                  # 全平台

@@ -2,10 +2,10 @@
 #
 # 用法：
 #   python deepseek_split.py export.json          # 输出到 ./DeepSeek/
-#   python deepseek_split.py export.json -o D:/AI OS/l2-memory/export/DeepSeek
+#   python deepseek_split.py export.json -o <repo>/l2-memory/export/DeepSeek
 #
 # 输入：DeepSeek History Exporter "全量合并 1 个 JSON" 导出的文件
-# 输出：每会话一 .md 文件（含 frontmatter），直接供 kb-archivist 扫描/提炼
+# 输出：每会话一 .md 文件（含 frontmatter），直接供提炼流程扫描/提炼
 
 import argparse
 import json

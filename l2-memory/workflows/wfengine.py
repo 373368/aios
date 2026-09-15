@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""声明式工作流引擎（私有 AI-OS 三层：YAML 编排 → 原语执行 → LLM 判断点）。
+"""声明式工作流引擎（AI-OS 三层：YAML 编排 → 原语执行 → LLM 判断点）。
 
 schema 对齐微软 Agent Framework Declarative Workflows 1.0 范式：
 kind: Workflow + trigger + variables + actions（InvokePrimitive / InvokeLLM /
@@ -12,7 +12,6 @@ import sys
 
 import yaml
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sdk"))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 from common import log, run_py, default_ref, judge_ref  # noqa: E402
 from modelz import chat, validate_yaml_sources  # noqa: E402

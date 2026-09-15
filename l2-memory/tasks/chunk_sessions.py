@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 超大会话分片器：把 export/<平台>/ 下超过阈值的会话 MD 按消息段切成多片，
-每片 ≤ 阈值，落盘到 chunks/<平台>/，供 kb-archivist 逐片提炼。
+每片 ≤ 阈值，落盘到 chunks/<平台>/，供提炼流程逐片处理。
 
 切片保留原文件 frontmatter（conversation_id 一致），因此：
 - 去重游标不变（按 conversation_id 去重，多片共享同一 id，提炼后全部幂等跳过）

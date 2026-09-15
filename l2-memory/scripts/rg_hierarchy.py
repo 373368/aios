@@ -98,21 +98,25 @@ if __name__ == "__main__":
     from collections import defaultdict
     if sys.platform == "win32":
         sys.stdout.reconfigure(encoding="utf-8")
-    v = np.load(r"D:\AI OS\l2-memory\eval-harness\cache\locomo_obs_embeddings.npz")["vectors"][:184]
-    ah = AggHierarchy(v)
+    # 合成数据自检：12 个簇 × 16 点（共 192），簇心分散于单位球
+    rng = np.random.default_rng(0)
+    centers = rng.normal(size=(12, 8)).astype(np.float32)
+    centers /= np.linalg.norm(centers, axis=1, keepdims=True)
+    V = np.vstack([c + 0.05 * rng.normal(size=(16, 8)).astype(np.float32) for c in centers])
+    ah = AggHierarchy(V)
     ah.build(k_levels=[36, 12, 4])
     print("层级规模:")
     for l in range(ah.n_levels + 1):
         print(f"  L{l}: {ah.get_level_size(l)} 簇")
-    if ah.n_levels >= 2:
-        l1 = ah.get_labels(1)
-        l2 = ah.get_labels(2)
-        sub = defaultdict(set)
-        for b1, b2 in zip(l1, l2):
-            sub[b2].add(b1)
-        allb = set()
-        for g, blocks in sub.items():
-            allb |= blocks
-            print(f"  L2团{g}: L1块 {sorted(blocks)}")
-        assert allb == set(range(ah.get_level_size(1))), "L1 块未全覆盖"
-        print("嵌套验证: L1→L2 覆盖完整、无跨界（边界对齐）OK")
+    assert [ah.get_level_size(l) for l in (1, 2, 3)] == [36, 12, 4], "层级规模不符"
+    # 嵌套验证：L2 的每个团 = 完整 L1 块并集（无跨界），且 L1 块全覆盖
+    l1 = ah.get_labels(1)
+    l2 = ah.get_labels(2)
+    sub = defaultdict(set)
+    for b1, b2 in zip(l1, l2):
+        sub[b2].add(b1)
+    allb = set()
+    for blocks in sub.values():
+        allb |= blocks
+    assert allb == set(range(ah.get_level_size(1))), "L1 块未全覆盖"
+    print("嵌套验证: L1→L2 覆盖完整、无跨界（边界对齐）OK")
