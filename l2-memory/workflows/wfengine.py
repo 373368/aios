@@ -2,9 +2,10 @@
 """声明式工作流引擎（AI-OS 三层：YAML 编排 → 原语执行 → LLM 判断点）。
 
 schema 对齐微软 Agent Framework Declarative Workflows 1.0 范式：
-kind: Workflow + trigger + variables + actions（InvokePrimitive / InvokeLLM /
-ConditionGroup / Loop）。表达式用 = 前缀（=System.Args.x / =Local.x / =Loop.Item）。
-原语经 common.run_py 子进程调用；LLM 判断点经 modelz.chat。
+kind: Workflow + trigger + variables + actions（InvokePrimitive / InvokeAgent /
+InvokeLLM / ConditionGroup / Loop）。表达式用 = 前缀（=System.Args.x / =Local.x / =Loop.Item）。
+原语经 common.run_py 子进程调用；agent 图经 agentgraph CLI 子进程调用（stdout=纯 JSON 契约，
+expects 产出校验）；LLM 判断点经 modelz.chat。
 """
 import json
 import os
@@ -13,11 +14,12 @@ import sys
 import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
-from common import log, run_py, default_ref, judge_ref  # noqa: E402
+from common import PYTHON, log, run_capture, run_py, default_ref, judge_ref  # noqa: E402
 from modelz import chat, validate_yaml_sources  # noqa: E402
 
 WORKFLOWS = os.path.dirname(os.path.abspath(__file__))
 PROMPTS = os.path.join(WORKFLOWS, "prompts")
+AGENTGRAPH = os.path.normpath(os.path.join(WORKFLOWS, "..", "agentgraph", "agentgraph.py"))
 
 
 class WFError(Exception):
@@ -131,6 +133,31 @@ def _interp(scope, raw):
     return raw
 
 
+def _fmt_input(v):
+    """agent --input 值格式：字符串原样，其余 JSON 序列化。"""
+    return v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+
+
+def _capture_output(scope, act, result):
+    """output 捕获：字符串简写（=Local.X / X）或字典映射（与 InvokePrimitive 同构）。"""
+    if "output" not in act:
+        return
+    target = act["output"]
+    if isinstance(target, str):
+        if str(target).startswith("=Local."):
+            scope.local[str(target)[7:]] = result
+        else:
+            scope.local[target] = result
+    elif isinstance(target, dict):
+        for var, expr in target.items():
+            if expr is None or str(expr).startswith("=Local."):
+                scope.local[var] = result
+            elif str(expr).startswith("="):
+                scope.local[var] = scope.eval(expr)
+            else:
+                scope.local[var] = result
+
+
 def run_action(scope, act):
     kind = act.get("kind")
     # 顶层 when 条件（微软范式：动作可带 when）
@@ -165,23 +192,40 @@ def run_action(scope, act):
                 result = json.loads(result)
             except json.JSONDecodeError as e:
                 raise WFError(f"{primitive} 输出非 JSON: {result[:200]} ({e})")
-        if "output" in act:
-            target = act["output"]
-            if isinstance(target, str):
-                # 简写：output: Local.Candidates → 结果直接存该变量
-                if str(target).startswith("=Local."):
-                    scope.local[str(target)[7:]] = result
-                else:
-                    scope.local[target] = result
-            elif isinstance(target, dict):
-                for var, expr in target.items():
-                    if expr is None or str(expr).startswith("=Local."):
-                        scope.local[var] = result
-                    elif str(expr).startswith("="):
-                        scope.local[var] = scope.eval(expr)
-                    else:
-                        scope.local[var] = result
+        _capture_output(scope, act, result)
         return out
+
+    if kind == "InvokeAgent":
+        # 工作流 → agent 图：调用 agentgraph CLI（契约：stdout=纯 JSON / stderr=日志 / exit=状态；expects 产出校验）
+        spec = act.get("spec")
+        if not isinstance(spec, str) or not spec:
+            raise WFError("InvokeAgent 缺 spec")
+        spec = _interp(scope, scope.eval(spec))
+        if not os.path.isabs(spec):
+            spec = os.path.normpath(os.path.join(WORKFLOWS, spec))
+        if not os.path.exists(spec):
+            raise WFError(f"agent spec 不存在: {spec}")
+        inputs = _resolve_args(scope, act.get("input", {}))
+        argv = [PYTHON, AGENTGRAPH, "run", spec, "--json"]
+        for k, v in sorted(inputs.items()):
+            argv.extend(["--input", f"{k}={_fmt_input(v)}"])
+        code, out, err = run_capture(argv)
+        if code != 0:
+            raise WFError(f"InvokeAgent 失败 code={code} spec={os.path.basename(spec)}: "
+                          f"{(err or out).strip()[:300]}")
+        try:
+            result = json.loads(out)
+        except json.JSONDecodeError as e:
+            raise WFError(f"InvokeAgent 输出非 JSON: {out[:200]} ({e})")
+        expect = act.get("expects") or []
+        if expect:
+            bad = [f for f in expect
+                   if f not in result or result[f] in (None, "", [], {})]
+            if bad:
+                raise WFError(f"InvokeAgent 契约不满足（缺失或空值）: {bad}；"
+                              f"spec 实际产出字段: {sorted(result)}")
+        _capture_output(scope, act, result)
+        return result
 
     if kind == "SetVariable":
         # 微软 Declarative Workflows 动作：将值（支持 {var} 内嵌替换）写入 Local
@@ -276,6 +320,7 @@ def run_workflow(wf_path, args):
     for act in wf.get("actions", []):
         run_action(scope, act)
     log(wf["metadata"]["name"], f"完成 actions={len(wf.get('actions', []))}")
+    return scope.local
 
 
 def main():

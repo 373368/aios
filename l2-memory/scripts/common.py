@@ -104,6 +104,17 @@ def run(argv, timeout=600, **kw):
     return p.returncode, (p.stdout or "") + (p.stderr or "")
 
 
+def run_capture(argv, timeout=600, **kw):
+    """子进程执行，stdout / stderr 分离返回 (exit_code, stdout, stderr)。
+
+    契约（agent 类调用）：stdout=数据（可 JSON）、stderr=日志、exit=状态。
+    """
+    p = subprocess.run(argv, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace",
+                       timeout=timeout, **kw)
+    return p.returncode, p.stdout or "", p.stderr or ""
+
+
 def run_py(script, *args, timeout=600):
     """python <script> <args...>，脚本在 scripts/ 或 tasks/。"""
     if not os.path.isabs(script):

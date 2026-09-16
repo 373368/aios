@@ -1,0 +1,27 @@
+kind: AgentGraph
+metadata:
+  name: script-smoke
+  description: 原语节点冒烟——agent 图内调用确定性脚本（wfprobe），离线可跑（无 LLM）
+trace: true
+outputs: [probe, again]
+state:
+  seed: {type: str}
+  probe: {type: list}
+  again: {type: list}
+nodes:
+  - id: probe
+    kind: primitive
+    primitive: wfprobe
+    args: ["hello", "{seed}"]
+    json: true
+    output: probe
+  - id: again
+    kind: primitive
+    primitive: wfprobe
+    args: ["{probe}"]
+    json: true
+    output: again
+edges:
+  - [START, probe]
+  - [probe, again]
+  - [again, END]

@@ -1,0 +1,14 @@
+kind: Workflow
+metadata:
+  name: wf-test-agent
+  description: InvokeAgent 冒烟——工作流调用 agent 图（并行分析师）并捕获最终状态
+variables:
+  topic: "声明式工作流与 agent 图协作的边界：各自该管什么"
+actions:
+  - kind: InvokeAgent
+    id: analysts
+    spec: ../agentgraph/specs/parallel-analysts.yaml
+    input:
+      topic: =Local.topic
+    output: =Local.Analysis
+    expects: [findings, report]

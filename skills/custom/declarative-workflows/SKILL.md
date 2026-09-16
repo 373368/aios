@@ -25,7 +25,9 @@ AI-OS 运行治理的**约定面**。把「特定场景多原语编排」写成 
 | 判断点 prompt | `<repo>\l2-memory\workflows\prompts\*_judge.txt` |
 | 写操作原语库 | `<repo>\l2-memory\scripts\primitives.py` |
 | 模型适配 | `<repo>\l2-memory\scripts\modelz.py`（default=DeepSeek-V4-Flash，judge_default 判断点专用） |
-| 公共层 | `<repo>\l2-memory\scripts\common.py`（run_py/log/锁/退出码） |
+| 公共层 | `<repo>\l2-memory\scripts\common.py`（run_py/run_capture/log/锁/退出码） |
+| agent 图运行时 | `<repo>\l2-memory\agentgraph\agentgraph.py`（LangGraph 声明式并行 agents） |
+| agent spec | `<repo>\l2-memory\agentgraph\specs\*.yaml` |
 
 ## 执行命令
 
@@ -62,6 +64,7 @@ actions:                                       # 顺序执行；每个动作可�
 | kind | 作用 | 关键字段 |
 |---|---|---|
 | `InvokePrimitive` | 调原语（确定性执行） | `primitive`（原语名）、`args`（JSON）、可选 `via: primitives`、`output` |
+| `InvokeAgent` | 调 agent 图（LangGraph，声明式并行） | `spec`（相对 workflows/ 或绝对）、`input`（表达式字典）、`output`、可选 `expects`（产出契约） |
 | `InvokeLLM` | LLM 判断点 | `prompt_template`（prompts/<名>.txt，`{content}` 注入 `input`）、`model`（缺省 =System.WorkflowModel→JudgeModel）、`json_output: true`、`output` |
 | `ConditionGroup` | 分支路由 | `conditions: [{when, actions:[...]}]`，首个命中执行并 break |
 | `Loop` | 遍历 | `over`（列表表达式）、`actions`；当前项 = `=Loop.Item` |
@@ -88,6 +91,27 @@ actions:                                       # 顺序执行；每个动作可�
 2. **独立脚本**（默认）：`python <script> --key value`（布尔 True→`--flag`，False→跳过该参数）。
 
 `output` 捕获：`=Local.X` 简写直接存；`{var: expr}` 字典按表达式映射。原语 stdout 为 JSON 时自动解析（`args.json: true` 或 `via: primitives`）。
+
+## Agent 调用契约（InvokeAgent）
+
+agent 图 = `<repo>\l2-memory\agentgraph\`（YAML spec → LangGraph StateGraph，声明式并行；节点类型 llm / primitive）。
+工作流经 `InvokeAgent` 子进程调用，契约与 Unix 对齐：
+
+- **argv**：`agentgraph.py run <spec> --json --input k=v ...`
+- **stdout = 纯 JSON**（agent 最终状态）；**stderr = 日志**；**exit**：0 成功 / 1 spec 或执行错误
+- spec 路径相对 `workflows/` 目录（或绝对路径）；input 值为字符串或 JSON 序列化
+- output 捕获与 InvokePrimitive 同构（`=Local.X` 简写 / 字典映射）
+- 产出契约：agent spec 声明 `outputs`；调用方可声明 `expects`（缺失/空值 → 报错，不静默）
+- 离线校验：`python agentgraph.py check <spec>`（编译图 + 校验模型/原语引用，不调 LLM）
+
+```yaml
+- kind: InvokeAgent
+  id: analysts
+  spec: ../agentgraph/specs/parallel-analysts.yaml
+  input: {topic: =Local.topic}
+  output: =Local.Analysis
+  expects: [findings, report]
+```
 
 ## 原语扩展约定
 
@@ -128,7 +152,7 @@ agent 使用路径：`list` 发现 → `status`/`render` 监控 → `trigger` �
 ## 新增工作流流程
 
 1. 定链路：原语编排序列 + 判断点位置（一个工作流一般 1 个判断点 + 1 个 ConditionGroup 路由）
-2. 写 YAML：复用 `InvokePrimitive / InvokeLLM / ConditionGroup / Loop / SetVariable`，参考 digest-daily.yaml 结构
+2. 写 YAML：复用 `InvokePrimitive / InvokeAgent / InvokeLLM / ConditionGroup / Loop / SetVariable`，参考 digest-daily.yaml 结构
 3. 写判断点 prompt 模板（`prompts/<name>_judge.txt`，输出 JSON 含 branch）
 4. 新原语时：实现 → 幂等 → 附自检/回归 → 注册进 `primitives.py` CLI 分发表
 5. 验证：先用 `dry_run` 或小样本跑通；参考 `wf-selfcheck.yaml` / `wf-test-judge.yaml` / `wf-test-source.yaml`（自定义 API 源 + $ENV key 引用）
@@ -146,3 +170,4 @@ agent 使用路径：`list` 发现 → `status`/`render` 监控 → `trigger` �
 - [ ] digest-daily 可执行（`dry_run=true` 预览不落盘）；`wf-selfcheck.yaml` 跑通
 - [ ] 新增工作流遵循本 schema，判断点输出 JSON 含 branch 且骨架白名单一致
 - [ ] 写操作全走 primitives（skill 内嵌命令形态已消除）
+- [ ] agent 协作链路：`python test_invoke_agent.py` 通过；`python agentgraph\test_agentgraph_script.py` 通过（离线）
