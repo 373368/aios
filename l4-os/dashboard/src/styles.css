@@ -3804,6 +3804,137 @@ select {
   border-color: rgb(120, 160, 255, 0.6);
 }
 
+.aios-wf__arg select {
+  flex: 1;
+  background: rgb(10, 16, 26, 0.5);
+  border: 1px solid rgb(148, 163, 184, 0.2);
+  border-radius: 6px;
+  color: var(--aios-text, #e2e8f0);
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.aios-wf__arg select:focus {
+  outline: none;
+  border-color: rgb(120, 160, 255, 0.6);
+}
+
+/* 工作流面板：页签 + 分组 + Agents 注册 */
+.aios-wf__tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.125rem;
+  border-bottom: 1px solid rgb(148, 163, 184, 0.14);
+}
+.aios-wf__tab {
+  padding: 0.25rem 0.625rem;
+  border-radius: 6px 6px 0 0;
+  font-size: 0.8125rem;
+  color: rgb(200, 210, 225, 0.65);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  cursor: pointer;
+}
+.aios-wf__tab:hover { color: #dff3ff; }
+.aios-wf__tab.is-active {
+  color: #dff3ff;
+  background: rgb(15, 22, 34, 0.45);
+  border-color: rgb(148, 163, 184, 0.18);
+  border-bottom-color: transparent;
+}
+.aios-wf__tabs .aios-topbar__btn { margin-left: auto; }
+.aios-wf__section { display: flex; flex-direction: column; gap: 0.5rem; }
+.aios-wf__group {
+  margin: 0.25rem 0 0;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  color: rgb(148, 163, 184, 0.75);
+}
+.aios-agent {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.625rem;
+  border-radius: 8px;
+  background: rgb(15, 22, 34, 0.2);
+  border: 1px solid rgb(148, 163, 184, 0.14);
+}
+.aios-agent.is-sel { border-color: rgb(56, 189, 248, 0.45); background: rgb(56, 189, 248, 0.06); }
+.aios-agent__check { display: flex; align-items: flex-start; padding-top: 0.125rem; }
+.aios-agent__check input { accent-color: #38bdf8; }
+.aios-agent__main { flex: 1; display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.aios-agent__head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.aios-agent__head strong { color: #dff3ff; font-size: 0.8125rem; }
+.aios-agent__model {
+  font-size: 0.625rem;
+  color: rgb(148, 163, 184, 0.85);
+  border: 1px solid rgb(148, 163, 184, 0.25);
+  border-radius: 999px;
+  padding: 0.05rem 0.375rem;
+}
+.aios-agent__desc { margin: 0; font-size: 0.75rem; color: rgb(200, 210, 225, 0.75); }
+.aios-agent__chips { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.125rem; }
+.aios-agent__chip {
+  font-size: 0.625rem;
+  padding: 0.05rem 0.375rem;
+  border-radius: 999px;
+  border: 1px solid rgb(148, 163, 184, 0.25);
+  color: rgb(200, 210, 225, 0.6);
+}
+.aios-agent__chip.is-on { color: #34d399; border-color: rgb(52, 211, 153, 0.4); }
+.aios-agent__chip-x {
+  margin-left: 0.25rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+.aios-agent__chip-x:hover { color: #f87171; }
+.aios-agent__confirmbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.375rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  background: rgb(251, 191, 36, 0.08);
+  font-size: 0.6875rem;
+  color: rgb(226, 232, 240, 0.9);
+}
+.aios-agent__confirmbar button { font-size: 0.6875rem; padding: 0.15rem 0.5rem; }
+.aios-agent__bar { display: flex; align-items: center; gap: 0.5rem; }
+.aios-agent__bar select {
+  flex: 1;
+  min-width: 0;
+  background: rgb(10, 16, 26, 0.5);
+  border: 1px solid rgb(148, 163, 184, 0.2);
+  border-radius: 6px;
+  color: var(--aios-text, #e2e8f0);
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+}
+.aios-agent__bar select:focus { outline: none; border-color: rgb(120, 160, 255, 0.6); }
+.aios-agent__bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+.aios-agent__hint { margin: 0; font-size: 0.6875rem; color: rgb(251, 191, 36, 0.85); }
+.aios-agent__msg {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: rgb(56, 189, 248, 0.06);
+  border: 1px solid rgb(56, 189, 248, 0.3);
+  font-size: 0.75rem;
+  color: rgb(200, 210, 225, 0.9);
+}
+.aios-agent__msg p { margin: 0; }
+.aios-agent__msg code { color: #dff3ff; }
+.aios-agent__actions { display: flex; gap: 0.5rem; margin-top: 0.25rem; }
+
 .aios-sys__bar {
   display: flex;
   align-items: center;
@@ -3858,3 +3989,10 @@ select {
   color: rgb(251, 191, 36, 0.9);
   margin-top: 0.5rem;
 }
+
+/* Agents：新建身份表单 */
+.aios-agent__headrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.aios-agent__form { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid #e6e4de; border-radius: 10px; background: #fbfaf7; margin-bottom: 10px; }
+.aios-agent__form label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: #8a867c; }
+.aios-agent__form input, .aios-agent__form textarea { font: inherit; font-size: 12.5px; padding: 6px 8px; border: 1px solid #ddd9d0; border-radius: 7px; background: #ffffff; color: inherit; }
+.aios-agent__form textarea { resize: vertical; min-height: 64px; }

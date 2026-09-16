@@ -1383,7 +1383,7 @@ function PersonalGoalHome({
       }))
     : [{
         agentId: "codex",
-        available: true,
+        available: false, // 能力清单未到达前不可用于建会话（否则 agent_id=codex 会 400）；清单到货后自动改选可用身份
         capability: personalAgentCapability("codex"),
         label: "Codex",
         statusLabel: "正在检测",

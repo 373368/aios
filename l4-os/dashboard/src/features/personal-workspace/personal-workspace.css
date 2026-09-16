@@ -770,6 +770,7 @@
 .personal-task-card-actions .personal-task-session-link { display: flex; width: auto; padding: 0 8px; gap: 5px; color: var(--pw-blue-ink); opacity: 1; }
 .personal-task-session-link span { white-space: nowrap; font-size: 10.5px; font-weight: 650; }
 .personal-task-session-status { color: var(--pw-blue-ink); font-weight: 650; }
+.personal-task-evidence { display: inline-flex; align-items: center; max-width: 100%; min-width: 0; padding: 1px 7px; border-radius: 6px; background: #f2f1ed; color: var(--pw-muted); font-size: 10.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .personal-task-kanban .personal-task-empty { margin: 2px 0 4px; padding: 16px 10px; border: 1px dashed var(--pw-line-strong); border-radius: 10px; text-align: center; font-size: 12px; }
 .personal-workspace-shell.has-drawer .personal-task-kanban { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .personal-workspace-shell.has-task-inspector .personal-channel-scroll:has(.personal-task-kanban) { padding-inline: 20px; }

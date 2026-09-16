@@ -230,6 +230,7 @@ export function GoalTasksView({
                   {execution ? <span className="personal-task-session-status">{execution.status === "running" || execution.status === "queued" ? t("runs.running") : execution.status === "failed" ? t("tasks.sessionError") : t("common.waiting")}</span> : null}
                   {!execution ? <span className="personal-task-session-status">{t("tasks.waiting")}</span> : null}
                   {todo.claimedBy ?? goal.agentLabel ?? goal.agentId}
+                  {todo.evidence ? <span className="personal-task-evidence" title={todo.evidence}>◈ {todo.evidence}</span> : null}
                 </small>
               </button>
               <div className="personal-task-card-actions">
@@ -266,7 +267,11 @@ export function GoalTasksView({
       <TaskLane count={Math.max(goal.doneTodoCount ?? 0, doneAgentTodos.length)} label={t("tasks.completed")} tone="done">
         {doneAgentTodos.map((todo) => (
           <button aria-pressed={selectedTodoId === todo.todoId} className={selectedTodoId === todo.todoId ? "is-selected" : undefined} key={todo.todoId} onClick={() => onSelect({ item: { ...todo, goalId: goal.goalId, goalTitle: goal.title, ownerLabel: todo.claimedBy ?? goal.agentLabel ?? goal.agentId }, kind: "todo" })} ref={selectedTodoId === todo.todoId ? (element) => { selectedTodoRef.current = element; } : undefined} type="button">
-            <span className="is-done">✓</span><strong>{todo.text}</strong><small>{todo.claimedBy ?? goal.agentLabel ?? goal.agentId}</small>
+            <span className="is-done">✓</span><strong>{todo.text}</strong>
+            <small>
+              <span>{todo.claimedBy ?? goal.agentLabel ?? goal.agentId}</span>
+              {todo.evidence ? <span className="personal-task-evidence" title={todo.evidence}>◈ {todo.evidence}</span> : null}
+            </small>
           </button>
         ))}
         {!doneAgentTodos.length ? <p className="personal-task-empty">{(goal.doneTodoCount ?? 0) > 0

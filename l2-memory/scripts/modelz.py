@@ -169,7 +169,8 @@ def resolve(ref=None, sources=None):
         raise ValueError(f"provider {provider}（kind=openai）缺 base")
     if kind == "openai" and not key and not _is_local(base):
         raise ValueError(f"provider {provider} 缺 api_key（非本地源必须配置，或用 $ENV:VAR_NAME 引用环境变量）")
-    return {"provider": provider, "model": model, "base": base, "api_key": key, "kind": kind}
+    return {"provider": provider, "model": model, "base": base, "api_key": key,
+            "headers": prov.get("headers") or {}, "kind": kind}
 
 
 def _chat_openai(info, messages, temperature, max_tokens, timeout):
@@ -184,6 +185,9 @@ def _chat_openai(info, messages, temperature, max_tokens, timeout):
     req.add_header("Content-Type", "application/json")
     if info.get("api_key"):
         req.add_header("Authorization", "Bearer " + info["api_key"])
+    # provider 自定义头（如 OpenCode Go 网关要求自有 UA + x-opencode-session 稳定会话号）
+    for hk, hv in (info.get("headers") or {}).items():
+        req.add_header(hk, hv)
     for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:

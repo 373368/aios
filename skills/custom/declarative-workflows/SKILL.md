@@ -149,8 +149,12 @@ agent 图 = `<repo>\l2-memory\agentgraph\`（YAML spec → LangGraph StateGraph�
 | 监控 | `python wfctl.py status <wf>` | 读运行日志判状态（state/last/lines） |
 | 渲染 | `python wfctl.py render <wf>` | 结构化状态 JSON（给 UI） |
 | 触发 | `python wfctl.py trigger <wf> <k=v...>` | 调 wfengine 同步执行，透传退出码 |
+| 身份清单 | `python wfctl.py agents` | 身份声明（`agentgraph/declarations`）+ 各 goal 注册状态（JSON） |
+| 注册身份 | `python wfctl.py agents-register --agent-id <a[,b...]> --goal-id <g> [--execute]` | 加入 goal 协作名单（缺省预览；loopx 侧要求 goal 已存在；逗号串需拆为重复参数） |
+| 移除身份 | `python wfctl.py agents-unregister --agent-id <a[,b...]> --goal-id <g> [--execute]` | 从 goal 名单移除（configure-goal 名单替换语义 + 全局同步） |
+| 新建身份 | `python wfctl.py agents-declare --name <slug> [--description ..] [--model ..] [--body ..]` | 新建声明 `declarations/<name>.md`（同名拒绝；body 留空写标准模板） |
 
-agent 使用路径：`list` 发现 → `status`/`render` 监控 → `trigger` 触发。
+agent 使用路径：`list` 发现 → `status`/`render` 监控 → `trigger` 触发；身份管理走 `agents*`（配合 loopx goal 协作名单）。
 
 ## 新增工作流流程
 

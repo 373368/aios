@@ -7,6 +7,7 @@ using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using System.IO;
 using System.Web;
+using System.Runtime.InteropServices;
 
 namespace AiosShell;
 
@@ -26,6 +27,7 @@ public partial class MainWindow : Window
     private static readonly string RuntimeRoot = Paths.RuntimeRoot;
     private static readonly string PythonExe = Paths.Python;
     private readonly List<Process> _children = new();
+    private static readonly IntPtr _childJob = ChildProcessJob.Create();
     private HttpListener? _listener;
     private string _distRoot = "";
 
@@ -86,7 +88,7 @@ public partial class MainWindow : Window
             CreateNoWindow = true,
         };
         var p = Process.Start(psi) ?? throw new InvalidOperationException("无法启动 loopx serve-status");
-        _children.Add(p);
+        TrackChild(p);
     }
 
     /// <summary>拉起 loopx Chat 服务（serve_chat，8767，供 /api/* 写通道；已监听则跳过）</summary>
@@ -108,7 +110,7 @@ public partial class MainWindow : Window
         psi.Environment["PYTHONUTF8"] = "1";
         var p = Process.Start(psi) ?? throw new InvalidOperationException("无法启动 loopx chat 服务");
         DrainProcessPipes(p);
-        _children.Add(p);
+        TrackChild(p);
     }
 
     /// <summary>重定向了 stdout/stderr 但无人读取 → 管道缓冲填满后子进程写日志永久阻塞（serve_chat 卡死根因）。异步排空防止此问题。</summary>
@@ -118,6 +120,13 @@ public partial class MainWindow : Window
         p.ErrorDataReceived += (_, _) => { };
         p.BeginOutputReadLine();
         p.BeginErrorReadLine();
+    }
+
+    /// <summary>登记子进程：加入连坐任务组，壳被强杀时由内核一并终结（防孤儿）</summary>
+    private void TrackChild(Process p)
+    {
+        TrackChild(p);
+        ChildProcessJob.Assign(_childJob, p);
     }
 
     /// <summary>拉起 opencode serve（顶栏 Chat 面板 iframe 目标，经 /oc/ 代理注入认证；已监听则跳过）</summary>
@@ -138,7 +147,7 @@ public partial class MainWindow : Window
         // 密码：用户级环境变量（HKCU:\Environment）已固化，任何新进程自动继承
         var p = Process.Start(psi) ?? throw new InvalidOperationException("无法启动 opencode serve");
         DrainProcessPipes(p);
-        _children.Add(p);
+        TrackChild(p);
     }
 
     /// <summary>拉起 OpenScience serve（顶栏 Chat 面板可选 agent，node + bin 入口，无认证；已监听则跳过）</summary>
@@ -158,7 +167,7 @@ public partial class MainWindow : Window
         };
         var p = Process.Start(psi) ?? throw new InvalidOperationException("无法启动 OpenScience serve");
         DrainProcessPipes(p);
-        _children.Add(p);
+        TrackChild(p);
     }
 
     /// <summary>内嵌静态服务：serve dashboard dist + /status.json 转发到 8766</summary>
@@ -425,7 +434,7 @@ public partial class MainWindow : Window
         ctx.Response.Close();
     }
 
-    /// <summary>wfctl 代理：调 wfctl.py 暴露 list/render/status/trigger 四接口给前端</summary>
+    /// <summary>wfctl 代理：调 wfctl.py 暴露 list/render/status/trigger/agents/agents-register/agents-unregister/agents-declare 接口给前端</summary>
     private static async Task ServeWfctlAsync(HttpListenerContext ctx)
     {
         var path = ctx.Request.Url?.AbsolutePath ?? "";
@@ -445,6 +454,41 @@ public partial class MainWindow : Window
                 foreach (string? k in ctx.Request.QueryString.AllKeys)
                     if (k is not null && k != "name")
                         args.Add($"{k}={ctx.Request.QueryString[k]}");
+        }
+        else if (sub is "agents")
+        {
+            args.Add("agents");
+        }
+        else if (sub is "agents-register")
+        {
+            args.Add("agents-register");
+            var agentId = ctx.Request.QueryString["agent_id"];
+            if (!string.IsNullOrEmpty(agentId)) { args.Add("--agent-id"); args.Add(agentId); }
+            var goalId = ctx.Request.QueryString["goal_id"];
+            if (!string.IsNullOrEmpty(goalId)) { args.Add("--goal-id"); args.Add(goalId); }
+            var exec = ctx.Request.QueryString["execute"];
+            if (exec == "1" || string.Equals(exec, "true", StringComparison.OrdinalIgnoreCase))
+                args.Add("--execute");
+        }
+        else if (sub is "agents-unregister")
+        {
+            args.Add("agents-unregister");
+            var agentId = ctx.Request.QueryString["agent_id"];
+            if (!string.IsNullOrEmpty(agentId)) { args.Add("--agent-id"); args.Add(agentId); }
+            var goalId = ctx.Request.QueryString["goal_id"];
+            if (!string.IsNullOrEmpty(goalId)) { args.Add("--goal-id"); args.Add(goalId); }
+            var exec = ctx.Request.QueryString["execute"];
+            if (exec == "1" || string.Equals(exec, "true", StringComparison.OrdinalIgnoreCase))
+                args.Add("--execute");
+        }
+        else if (sub is "agents-declare")
+        {
+            args.Add("agents-declare");
+            foreach (var key in new[] { "name", "description", "model", "body" })
+            {
+                var val = ctx.Request.QueryString[key];
+                if (!string.IsNullOrEmpty(val)) { args.Add("--" + key); args.Add(val); }
+            }
         }
         else
         {
@@ -685,5 +729,76 @@ public partial class MainWindow : Window
             }
         }
         catch { }
+    }
+}
+
+/// <summary>Windows Job Object 连坐组：挂 KILL_ON_JOB_CLOSE，壳被强杀时由内核终结所有成员子进程。</summary>
+internal static class ChildProcessJob
+{
+    private const int JobObjectExtendedLimitInformation = 9;
+    private const uint JobObjectLimitKillOnJobClose = 0x2000;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JobBasicLimitInformation
+    {
+        public long PerProcessUserTimeLimit;
+        public long PerJobUserTimeLimit;
+        public uint LimitFlags;
+        public UIntPtr MinimumWorkingSetSize;
+        public UIntPtr MaximumWorkingSetSize;
+        public uint ActiveProcessLimit;
+        public UIntPtr Affinity;
+        public uint PriorityClass;
+        public uint SchedulingClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JobIoCounters
+    {
+        public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount;
+        public ulong ReadTransferCount, WriteTransferCount, OtherTransferCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JobExtendedLimitInformation
+    {
+        public JobBasicLimitInformation BasicLimitInformation;
+        public JobIoCounters IoInfo;
+        public UIntPtr ProcessMemoryLimit, JobMemoryLimit, PeakProcessMemoryUsed, PeakJobMemoryUsed;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr CreateJobObject(IntPtr attributes, string? name);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool SetInformationJobObject(IntPtr job, int infoClass, IntPtr info, uint infoLength);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+    public static IntPtr Create()
+    {
+        var job = CreateJobObject(IntPtr.Zero, null);
+        if (job == IntPtr.Zero) return IntPtr.Zero;
+        var info = new JobExtendedLimitInformation();
+        info.BasicLimitInformation.LimitFlags = JobObjectLimitKillOnJobClose;
+        var size = Marshal.SizeOf<JobExtendedLimitInformation>();
+        var ptr = Marshal.AllocHGlobal(size);
+        try
+        {
+            Marshal.StructureToPtr(info, ptr, false);
+            SetInformationJobObject(job, JobObjectExtendedLimitInformation, ptr, (uint)size);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
+        return job;
+    }
+
+    public static void Assign(IntPtr job, Process process)
+    {
+        if (job == IntPtr.Zero) return;
+        try { AssignProcessToJobObject(job, process.Handle); } catch { /* 不支持时静默降级为原有清理逻辑 */ }
     }
 }

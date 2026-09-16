@@ -186,7 +186,9 @@ def main():
         return 0
 
     if args.cmd == "register":
-        argv = ["register-agent", "--goal-id", args.goal_id, "--agent-id", args.agent_id]
+        argv = ["register-agent", "--goal-id", args.goal_id]
+        for aid in [a.strip() for a in args.agent_id.split(",") if a.strip()]:
+            argv += ["--agent-id", aid]  # repeatable 形式（逗号串形态实测不可靠）
         if args.execute:
             argv.append("--execute")
         r = bridge.call(argv)

@@ -162,8 +162,18 @@ export function StarfieldBackground() {
 
     init();
 
+    // 窗口/容器尺寸变化时同步渲染尺寸（vendored 3d-force-graph 不自动监听 resize，否则全屏后星空偏移）
+    const resizeObserver = new ResizeObserver(() => {
+      if (!graph || disposed) return;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w > 0 && h > 0) graph.width(w).height(h);
+    });
+    resizeObserver.observe(container);
+
     return () => {
       disposed = true;
+      resizeObserver.disconnect();
       if (pulseTimer) clearInterval(pulseTimer);
       try { graph?.graphData?.({ nodes: [], links: [] }); graph?.pauseAnimation?.(); } catch { /* ignore */ }
     };
