@@ -23,9 +23,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 import paths as _paths  # noqa: E402
 
-LOOPX = _paths.LOOPX_EXE or "loopx"
-RUNTIME_ROOT = os.path.join(_paths.ROOT, ".loopx-runtime")
-REGISTRY = os.path.join(_paths.ROOT, ".loopx", "registry.json")
+import loopx_bridge as bridge  # noqa: E402
+
 OSRUN = os.path.join(_paths.L2_DIR, "workflows", "osrun.py")
 GOAL = "ai-os-goal"
 AGENT = "openscience"
@@ -39,34 +38,6 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 
-def _loopx(args: list[str], timeout: int = 90) -> dict:
-    cmd = [LOOPX, "--registry", REGISTRY, "--runtime-root", RUNTIME_ROOT, "--format", "json", *args]
-    try:
-        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=timeout)
-    except FileNotFoundError:
-        return {"ok": False, "step": "loopx-not-found", "cmd": cmd}
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "step": "timeout", "cmd": cmd}
-    payload = {}
-    if p.stdout.strip():
-        try:
-            payload = json.loads(p.stdout)
-        except json.JSONDecodeError:
-            payload = {"raw": p.stdout.strip()}
-    return {"ok": not p.returncode, "rc": p.returncode, "payload": payload,
-            "stderr": p.stderr.strip() if p.stderr.strip() else None,
-            "cmd": cmd}
-
-
-def _first_todo_id(payload: dict) -> str | None:
-    for key in ("todo_id", "todoId", "id"):
-        val = payload.get(key)
-        if val:
-            return str(val)
-    return None
-
-
 def run_goal(goal_text: str, *, dry: bool = False, skip_exec: bool = False, timeout: int = 3600) -> dict:
     result: dict[str, object] = {"goal": goal_text, "dry": dry, "steps": {}}
     base = ["--dry-run"] if dry else []
@@ -74,15 +45,15 @@ def run_goal(goal_text: str, *, dry: bool = False, skip_exec: bool = False, time
     # 1. todo add (advancement_task, claimed by openscience)
     add_args = ["todo", "add", "--goal-id", GOAL, "--role", "agent", "--text", goal_text,
                 "--task-class", "advancement_task", "--claimed-by", AGENT, *base]
-    r = _loopx(add_args)
+    r = bridge.call(add_args)
     result["steps"]["todo_add"] = r
-    todo_id = _first_todo_id(r["payload"]) if r["ok"] else None
+    todo_id = bridge.first_todo_id(r["payload"]) if r["ok"] else None
     if not r["ok"]:
         result["error"] = "todo_add failed"
         return result
 
     # 2. quota should-run (gate before execution); multi-agent needs identity scope
-    q = _loopx(["quota", "should-run", "--goal-id", GOAL, "--agent-id", AGENT])
+    q = bridge.call(["quota", "should-run", "--goal-id", GOAL, "--agent-id", AGENT])
     result["steps"]["quota_should_run"] = q
 
     # 3. execute via osrun (skip real model run in dry mode)
@@ -102,19 +73,19 @@ def run_goal(goal_text: str, *, dry: bool = False, skip_exec: bool = False, time
     result["steps"]["execute"] = run_result
     if not dry and (run_result.get("rc") or run_result.get("exit_code")):
         # non-delivery: void-slot instead of complete
-        vs = _loopx(["quota", "void-slot", "--goal-id", GOAL, "--agent-id", AGENT])
+        vs = bridge.call(["quota", "void-slot", "--goal-id", GOAL, "--agent-id", AGENT])
         result["steps"]["quota_void_slot"] = vs
         result["error"] = "execution failed -> void-slot"
         return result
 
     # 4. todo complete (agent lifecycle actor + public-safe evidence)
     ev = run_result.get("elapsed_s") if not dry else "dry-run"
-    comp = _loopx(["todo", "complete", "--goal-id", GOAL, "--todo-id", todo_id,
-                   "--agent-id", AGENT, "--evidence", f"osrun elapsed_s={ev}", *base])
+    comp = bridge.call(["todo", "complete", "--goal-id", GOAL, "--todo-id", todo_id,
+                        "--agent-id", AGENT, "--evidence", f"osrun elapsed_s={ev}", *base])
     result["steps"]["todo_complete"] = comp
 
     # 5. quota spend-slot (accounting)
-    spend = _loopx(["quota", "spend-slot", "--goal-id", GOAL, "--agent-id", AGENT])
+    spend = bridge.call(["quota", "spend-slot", "--goal-id", GOAL, "--agent-id", AGENT])
     result["steps"]["quota_spend_slot"] = spend
     return result
 
@@ -132,9 +103,9 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.cmd == "check":
-        for name, path in (("LOOPX", LOOPX), ("OSRUN", OSRUN)):
+        for name, path in (("LOOPX", bridge.LOOPX), ("OSRUN", OSRUN)):
             print(f"{name} exists={os.path.exists(path)}: {path}")
-        q = _loopx(["status"])
+        q = bridge.call(["status"])
         print("loopx status ok=", q["ok"], "| error=", q.get("stderr"))
         return 0
     if args.cmd == "run":

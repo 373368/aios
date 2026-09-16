@@ -7,6 +7,8 @@ YAML 声明图（节点/边/状态/模型）→ 编译为 LangGraph StateGraph �
           fan-in 节点自动等待全部上游；list + reducer=add 合并并行写入
   - 节点类型：llm（默认，prompt/{state字段}渲染）/ primitive（调 scripts|tasks 脚本原语，
               argv 支持 {state字段} 渲染，json: true 解析 stdout）
+  - 声明身份：llm 节点可绑定 declaration: <md>（正文=人设/运行规范/专用提示词 → system
+              prompt；frontmatter 可选 name/description/model）——同底座、不同声明 = 多身份
   - 产出契约：outputs 声明对外产出字段；check 校验（在 state 内 且 被节点写入）
   - 模型：引用 config.json "provider/model"，经 modelz 解析（仅 openai 兼容来源）
 
@@ -46,6 +48,28 @@ def _fail(msg):
     raise SystemExit(f"[agentgraph] {msg}")
 
 
+def load_declaration(path):
+    """声明文档（身份）：可选 YAML frontmatter（name/description/model）+ 正文=system prompt。
+
+    兼容 opencode 风格 agent 定义（其余 frontmatter 字段忽略）与纯 markdown 文档。
+    正文为静态文本（不做 {字段} 渲染）。
+    """
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    meta, body = {}, text.strip()
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) != 3:
+            _fail(f"声明 {path}: frontmatter 未闭合（缺结尾 ---）")
+        meta = yaml.safe_load(parts[1]) or {}
+        if not isinstance(meta, dict):
+            _fail(f"声明 {path}: frontmatter 必须是映射（键值对）")
+        body = parts[2].strip()
+    if not body:
+        _fail(f"声明 {path}: 正文（system prompt）为空")
+    return meta, body
+
+
 def load_spec(path):
     with open(path, encoding="utf-8") as f:
         spec = yaml.safe_load(f)
@@ -77,6 +101,15 @@ def load_spec(path):
             _fail(f"节点 {n['id']}: output 字段 {n['output']} 不在 state 中")
         refs = []
         if kind == "llm":
+            decl = n.get("declaration")
+            if decl:
+                dpath = decl if os.path.isabs(decl) else os.path.normpath(
+                    os.path.join(os.path.dirname(os.path.abspath(path)), decl))
+                if not os.path.exists(dpath):
+                    _fail(f"节点 {n['id']}: 声明文件不存在: {decl}")
+                n["decl_meta"], n["decl_body"] = load_declaration(dpath)
+                n["decl_name"] = n["decl_meta"].get("name") or \
+                    os.path.splitext(os.path.basename(dpath))[0]
             if not n.get("prompt"):
                 _fail(f"节点 {n['id']}: llm 节点缺 prompt")
             refs.append(n["prompt"])
@@ -111,9 +144,14 @@ def load_spec(path):
     return spec
 
 
+def _decl_model(node):
+    """声明 frontmatter model（身份声明的模型优先于节点/spec 级声明）。"""
+    return (node.get("decl_meta") or {}).get("model")
+
+
 def used_models(spec):
     default_ref = spec.get("model") or modelz.load_models().get("default")
-    return {n.get("model") or default_ref for n in spec["nodes"]
+    return {_decl_model(n) or n.get("model") or default_ref for n in spec["nodes"]
             if n.get("kind", "llm") == "llm"}
 
 
@@ -148,8 +186,10 @@ def _extract_json(text):
 
 def _add_trace(spec, node, t0, result):
     if spec.get("trace"):
-        result["trace"] = [{"node": node["id"], "t0": round(t0, 3),
-                            "t1": round(time.time(), 3)}]
+        entry = {"node": node["id"], "t0": round(t0, 3), "t1": round(time.time(), 3)}
+        if node.get("decl_name"):
+            entry["agent"] = node["decl_name"]
+        result["trace"] = [entry]
 
 
 def _resolve_primitive(name):
@@ -202,11 +242,17 @@ def make_llm_node(spec, node):
     def fn(cur):
         t0 = time.time()
         msgs = []
+        sys_parts = []
+        if node.get("decl_body"):
+            sys_parts.append(node["decl_body"])
         if node.get("system"):
-            msgs.append(("system", _render(node["system"], cur)))
+            sys_parts.append(_render(node["system"], cur))
+        if sys_parts:
+            msgs.append(("system", "\n\n".join(sys_parts)))
         msgs.append(("human", _render(node["prompt"], cur)))
-        resp = build_llm(node.get("model") or spec.get("model") or
-                         modelz.load_models().get("default")).invoke(msgs)
+        ref = (_decl_model(node) or node.get("model") or spec.get("model")
+               or modelz.load_models().get("default"))
+        resp = build_llm(ref).invoke(msgs)
         content = resp.content
         text = content if isinstance(content, str) else "".join(
             p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
@@ -292,6 +338,9 @@ def cmd_check(spec_path):
         build_llm(ref)
     name = (spec.get("metadata") or {}).get("name", spec_path)
     print(f"OK: {name} | {len(spec['nodes'])} 节点 / {len(spec['edges'])} 边 | 模型 {refs}")
+    declared = [f"{n['id']}→{n['decl_name']}" for n in spec["nodes"] if n.get("decl_name")]
+    if declared:
+        print(f"  声明身份: {', '.join(declared)}")
 
 
 def cmd_graph(spec_path):

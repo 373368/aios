@@ -28,6 +28,7 @@ AI-OS 运行治理的**约定面**。把「特定场景多原语编排」写成 
 | 公共层 | `<repo>\l2-memory\scripts\common.py`（run_py/run_capture/log/锁/退出码） |
 | agent 图运行时 | `<repo>\l2-memory\agentgraph\agentgraph.py`（LangGraph 声明式并行 agents） |
 | agent spec | `<repo>\l2-memory\agentgraph\specs\*.yaml` |
+| agent 身份声明 | `<repo>\l2-memory\agentgraph\declarations\*.md`（正文=人设/规范/提示词 → system） |
 
 ## 执行命令
 
@@ -102,7 +103,9 @@ agent 图 = `<repo>\l2-memory\agentgraph\`（YAML spec → LangGraph StateGraph�
 - spec 路径相对 `workflows/` 目录（或绝对路径）；input 值为字符串或 JSON 序列化
 - output 捕获与 InvokePrimitive 同构（`=Local.X` 简写 / 字典映射）
 - 产出契约：agent spec 声明 `outputs`；调用方可声明 `expects`（缺失/空值 → 报错，不静默）
-- 离线校验：`python agentgraph.py check <spec>`（编译图 + 校验模型/原语引用，不调 LLM）
+- 身份声明：llm 节点可绑 `declaration: <md>`（相对 spec 目录；正文=人设/规范/提示词 → system prompt）；多份声明 fan-out = 多身份并行（同底座）；模型优先级 声明 > 节点 > spec
+- loopx 协作接入：`python goalrun.py run "<task>" --spec <spec> --agent-id <身份> [--task-key <字段>] [--dry-run]`（custom-runner 契约：todo→quota→agentgraph→complete；桥接层 `loopx_bridge.py`）
+- 离线校验：`python agentgraph.py check <spec>`（编译图 + 校验模型/声明引用，不调 LLM）
 
 ```yaml
 - kind: InvokeAgent

@@ -1,7 +1,7 @@
 kind: AgentGraph
 metadata:
   name: parallel-analysts
-  description: 三个并行分析师（技术/风险/应用）+ 汇总节点；声明式 fan-out/fan-in 最小示例
+  description: 三名声明身份（技术/风险/应用）+ 主编汇总；同底座、不同声明，fan-out/fan-in 协作示例
 model: volcengine-agent-plan/deepseek-v4-flash
 trace: true
 outputs: [findings, report]
@@ -11,22 +11,23 @@ state:
   report: {type: str}
 nodes:
   - id: tech
-    prompt: |
-      你是技术分析师。针对主题「{topic}」给出 3 条技术视角要点，每条一行，直接输出，不要客套。
+    declaration: ../declarations/tech-analyst.md
+    prompt: 针对主题「{topic}」，按技术分析师的身份与规范完成分析。
     output: findings
   - id: risk
-    prompt: |
-      你是风险分析师。针对主题「{topic}」给出 3 条风险与局限要点，每条一行，直接输出。
+    declaration: ../declarations/risk-analyst.md
+    prompt: 针对主题「{topic}」，按风险分析师的身份与规范完成分析。
     output: findings
   - id: application
-    prompt: |
-      你是应用分析师。针对主题「{topic}」给出 3 条应用场景要点，每条一行，直接输出。
+    declaration: ../declarations/use-analyst.md
+    prompt: 针对主题「{topic}」，按应用分析师的身份与规范完成分析。
     output: findings
   - id: synthesis
-    system: 你是一名严谨的研究汇总者。
+    declaration: ../declarations/editor.md
     prompt: |
-      把以下要点汇总为一段 150 字以内的结论（中文），不要分点：
+      以下是各位分析师的要点汇总：
       {findings}
+      请按汇总主编的身份与规范完成汇总。
     output: report
 edges:
   - [START, tech]
