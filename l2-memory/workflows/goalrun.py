@@ -3,7 +3,7 @@
 """goalrun — 声明式 agent（agentgraph spec + 身份声明）接入 loopx 协作的 custom-runner。
 
 契约（与 osrun-goal 相同）：
-  todo add → quota should-run → execute（agentgraph run）→ todo complete → quota spend-slot
+  user_gate preflight → todo add → quota should-run → execute（agentgraph run）→ todo complete → quota spend-slot
 
 身份两层：
   - loopx 侧：--agent-id（协作身份 / quota 记账对象）
@@ -15,7 +15,9 @@
         --agent-id <身份> [--task-key topic] [--goal-id ai-os-goal] [--dry-run] [--skip-exec]
     python goalrun.py check
 
-注：loopx 要求 agent 先注册到 goal（registered_agents）；未注册时 todo add 报 not registered。
+注 1：loopx 要求 agent 先注册到 goal（registered_agents）；未注册时 todo add 报 not registered。
+注 2：preflight 会拒绝执行存在未解除 user_gate（阻塞本身份）的 goal——先由 owner 决策
+      （loopx todo complete --todo-id <id> --decision-outcome approve|reject）再重试。
 """
 from __future__ import annotations
 
@@ -41,13 +43,61 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 
+def _gate_blocks(todo, agent):
+    """镜像 loopx todos._user_todo_visible_to_agent：global→全员；blocks_agent/bound_agent→等值；无作用域→全员。"""
+    if todo.get("global_gate"):
+        return True
+    ba = todo.get("blocks_agent")
+    if ba:
+        return ba == agent
+    bound = todo.get("bound_agent")
+    if bound:
+        return bound == agent
+    return True
+
+
+def check_user_gates(goal, agent):
+    """预检：读取 goal todos，找出阻塞本身份的未解除 user_gate。"""
+    r = bridge.call(["todo", "list", "--goal-id", goal])
+    if not r["ok"]:
+        return {"checked": False, "blocking": [],
+                "error": (r.get("stderr") or r.get("step") or "todo list failed")}
+    payload = r["payload"] if isinstance(r["payload"], dict) else {}
+    blocking = []
+    for t in payload.get("todos") or []:
+        if not isinstance(t, dict):
+            continue
+        if t.get("role") != "user" or t.get("task_class") != "user_gate":
+            continue
+        if str(t.get("status") or "").lower() == "done":
+            continue
+        if _gate_blocks(t, agent):
+            blocking.append({"todo_id": t.get("todo_id"), "text": t.get("text"),
+                             "blocks_agent": t.get("blocks_agent"),
+                             "global_gate": bool(t.get("global_gate"))})
+    return {"checked": True, "blocking": blocking}
+
+
 def run_task(task, *, spec, goal, agent, task_key, dry=False, skip_exec=False, timeout=3600):
     spec = os.path.abspath(spec)
     result = {"task": task, "spec": os.path.basename(spec), "goal_id": goal,
               "agent_id": agent, "dry": dry, "steps": {}}
     base = ["--dry-run"] if dry else []
 
-    # 0. 预检：spec 编译（check，不调 LLM）——失败不污染 loopx 状态
+    # 0. 预检：user_gate（存在阻塞本身份的未解除 gate → 拒绝执行；dry 仅记录）
+    gate = check_user_gates(goal, agent)
+    result["steps"]["user_gate_preflight"] = gate
+    if not gate["checked"]:
+        result["error"] = f"user_gate preflight 无法完成: {gate.get('error')}"
+        return result
+    if gate["blocking"] and not dry:
+        ids = ", ".join(str(g.get("todo_id") or "?") for g in gate["blocking"])
+        result["error"] = (f"存在未解除的 user_gate 阻塞本身份（{ids}）；先由 owner 决策: "
+                           f"loopx todo complete --goal-id {goal} --todo-id <id> "
+                           f"--decision-outcome approve|reject")
+        return result
+
+    # 0b. 预检：spec 编译（check，不调 LLM）——失败不污染 loopx 状态
     if not skip_exec:
         pre = subprocess.run([PY, AGENTGRAPH, "check", spec], capture_output=True,
                              text=True, encoding="utf-8", errors="replace", timeout=120)

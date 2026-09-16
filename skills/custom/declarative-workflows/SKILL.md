@@ -104,7 +104,7 @@ agent 图 = `<repo>\l2-memory\agentgraph\`（YAML spec → LangGraph StateGraph�
 - output 捕获与 InvokePrimitive 同构（`=Local.X` 简写 / 字典映射）
 - 产出契约：agent spec 声明 `outputs`；调用方可声明 `expects`（缺失/空值 → 报错，不静默）
 - 身份声明：llm 节点可绑 `declaration: <md>`（相对 spec 目录；正文=人设/规范/提示词 → system prompt）；多份声明 fan-out = 多身份并行（同底座）；模型优先级 声明 > 节点 > spec
-- loopx 协作接入：`python goalrun.py run "<task>" --spec <spec> --agent-id <身份> [--task-key <字段>] [--dry-run]`（custom-runner 契约：todo→quota→agentgraph→complete；桥接层 `loopx_bridge.py`）
+- loopx 协作接入：`python goalrun.py run "<task>" --spec <spec> --agent-id <身份> [--task-key <字段>] [--dry-run]`（custom-runner 契约：user_gate preflight→todo→quota→agentgraph→complete；桥接层 `loopx_bridge.py`；存在未解除的 user_gate 且阻塞本身份时直接拒绝执行）
 - 离线校验：`python agentgraph.py check <spec>`（编译图 + 校验模型/声明引用，不调 LLM）
 
 ```yaml
