@@ -1243,7 +1243,7 @@ function buildPersonalHomeModel(
 
   const systemHealthIssues: string[] = [];
   if (!payload.ok) {
-    systemHealthIssues.push("状态载荷未标记为正常 (payload.ok === false)");
+    systemHealthIssues.push(payload.degraded ? "loopx 未接入（可选组件）：实时状态不可用" : "状态载荷未标记为正常");
   }
   if (payload.contract && !payload.contract.ok) {
     const summary = payload.contract.summary;
@@ -2479,6 +2479,11 @@ function PersonalGoalHome({
   };
   return (
     <div className={theme === "dark" ? "dark" : ""} data-testid="personal-goal-home">
+      {payload.degraded ? (
+        <div className="aios-degraded-banner" role="status">
+          loopx 未接入（可选组件）：实时状态与 goal 投影不可用；安装并启动 loopx 后自动恢复。
+        </div>
+      ) : null}
       <PersonalWorkspacePage
         agents={agentOptions.map((agent) => ({
           adapterKind: agent.adapterKind,

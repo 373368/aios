@@ -2,6 +2,10 @@
 
 版本号与本地便携包 `aios-<版本>-win64.zip` 对应；未发布 GitHub Release。
 
+## 0.4.2 — 2026-09-17
+
+- 修复无 loopx 机器上仍报「无法加载实时状态」：降级载荷按 dashboard schema 补全字段（缺失字段会被前端 Zod 校验拒绝）；前端识别 `degraded` 标记并显示顶部提示条，健康关注点文案改为人话
+
 ## 0.4.1 — 2026-09-17
 
 - 修复：/status.json 在未安装 loopx 的机器上返回 HTTP 502（"无法加载实时状态"）→ 改为降级 JSON（HTTP 200 + 说明），并回退尝试 8766 serve-status；loopx 为可选组件，不再阻断控制台

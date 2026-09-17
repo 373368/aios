@@ -4109,3 +4109,4 @@ select {
 .aios-diag__item { padding: 6px 8px; border-radius: 6px; background: rgb(148, 163, 184, 0.06); margin-bottom: 4px; }
 .aios-diag__head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
 .aios-diag__detail { color: rgb(148, 163, 184, 0.85); font-size: 12px; margin: 2px 0 0; word-break: break-all; }
+.aios-degraded-banner { padding: 6px 14px; font-size: 12.5px; line-height: 1.5; text-align: center; color: #92400e; background: #fef3c7; border-bottom: 1px solid #fcd34d; }

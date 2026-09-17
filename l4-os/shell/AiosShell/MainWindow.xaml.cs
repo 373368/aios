@@ -345,7 +345,8 @@ public partial class MainWindow : Window
         }
         if (resp == null)
         {
-            // 降级：loopx 未接入（未安装/未启动）——返回 200 + 说明，控制台其余功能不受影响
+            // 降级：loopx 未接入（未安装/未启动）——返回 200 + 完整结构载荷
+            // （字段必须满足 dashboard 的 statusPayloadSchema，否则前端 Zod 校验失败会回落「无法加载实时状态」错误屏）
             ctx.Response.StatusCode = 200;
             ctx.Response.ContentType = "application/json; charset=utf-8";
             ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
@@ -353,11 +354,34 @@ public partial class MainWindow : Window
             {
                 ok = false,
                 degraded = true,
-                error = "loopx 未接入（可选组件）：实时状态不可用",
+                registry = "",
+                runtime_root = "",
                 goal_count = 0,
                 run_count = 0,
-                attention_queue = new { items = Array.Empty<object>() },
-                contract_warnings = new[] { "loopx 服务未运行（可选组件）——实时状态 / goal 投影不可用；安装并启动 loopx 后自动恢复" },
+                status_contract = new
+                {
+                    schema_version = 0,
+                    minimum_dashboard_schema_version = 0,
+                    producer = "aios-shell-degraded",
+                    reload_hint = (string?)null,
+                },
+                local_dashboard_api = new { source = "shell-degraded", status_url = "/status.json" },
+                contract = new
+                {
+                    ok = true,
+                    summary = new { errors = 0, warnings = 0, checks = 0 },
+                    errors = Array.Empty<string>(),
+                    warnings = new[] { "loopx 未接入（可选组件）：实时状态与 goal 投影不可用；安装并启动 loopx 后自动恢复" },
+                },
+                attention_queue = new
+                {
+                    available = false,
+                    item_count = 0,
+                    needs_user_or_controller = 0,
+                    needs_codex = 0,
+                    watching_external_evidence = 0,
+                    items = Array.Empty<object>(),
+                },
             });
             var sb = System.Text.Encoding.UTF8.GetBytes(stub);
             await ctx.Response.OutputStream.WriteAsync(sb);
