@@ -99,6 +99,7 @@ interface RegisterResult {
  */
 /** 常用参数说明（纯前端提示，不涉及数据；布尔类给固定选项下拉） */
 const ARG_HINTS: Record<string, { hint: string; options?: string[] }> = {
+  name: { hint: "问候对象（可选，默认「世界」）" },
   source: { hint: "源目录路径，默认走收件箱" },
   skip_export: { hint: "是否跳过导出", options: ["", "true", "false"] },
   query: { hint: "检索关键词，留空全量" },
@@ -110,8 +111,9 @@ const ARG_HINTS: Record<string, { hint: string; options?: string[] }> = {
 /** 工作流分组（编排布局：按管线归类；未列出的归入「其他」）
  *  机读任务（agent-forge / wf-selfcheck / wf-test-*）由 wfctl 按 ui_hidden 过滤，不上面板 */
 const WF_GROUPS: { title: string; names: string[] }[] = [
-  { title: "记忆管线", names: ["digest-daily"] },
-  { title: "内容管线", names: ["archive-daily", "track-daily", "research"] },
+  { title: "演示", names: ["demo-hello"] },
+  { title: "内容管线", names: ["digest-daily"] },
+  { title: "数据管线", names: ["archive-daily", "track-daily", "research"] },
   { title: "工厂", names: ["tool-scout"] },
 ];
 

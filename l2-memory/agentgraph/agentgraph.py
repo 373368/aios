@@ -50,10 +50,34 @@ def _fail(msg):
     raise SystemExit(f"[agentgraph] {msg}")
 
 
+SKILLS_ROOT = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "skills", "custom"))
+
+
+def _load_skill(name):
+    """读 skills/custom/<name>/SKILL.md（去 frontmatter）→ 供声明内联加载。
+
+    找不到时告警不中断（返回 None）。
+    """
+    p = os.path.join(SKILLS_ROOT, name, "SKILL.md")
+    if not os.path.isfile(p):
+        print(f"[agentgraph] 警告: 声明引用的 skill 不存在: {name}（{p}）", file=sys.stderr)
+        return None
+    with open(p, encoding="utf-8") as f:
+        t = f.read()
+    if t.startswith("---"):
+        parts = t.split("---", 2)
+        if len(parts) == 3:
+            t = parts[2]
+    return t.strip()
+
+
 def load_declaration(path):
-    """声明文档（身份）：可选 YAML frontmatter（name/description/model）+ 正文=system prompt。
+    """声明文档（身份）：可选 YAML frontmatter（name/description/model/skills）+ 正文=system prompt。
 
     兼容 opencode 风格 agent 定义（其余 frontmatter 字段忽略）与纯 markdown 文档。
+    frontmatter `skills: [<名>...]`：从 skills/custom/<名>/SKILL.md 内联技能全文（单一事实源，
+    避免各声明复制粘贴），追加为「## 随附技能：<名>」小节；缺失仅告警。
     正文为静态文本（不做 {字段} 渲染）。
     """
     with open(path, encoding="utf-8") as f:
@@ -69,6 +93,15 @@ def load_declaration(path):
         body = parts[2].strip()
     if not body:
         _fail(f"声明 {path}: 正文（system prompt）为空")
+    skills = meta.get("skills") or []
+    if isinstance(skills, str):
+        skills = [skills]
+    if not isinstance(skills, list):
+        _fail(f"声明 {path}: skills 必须是列表（或单个字符串）")
+    for sk in skills:
+        content = _load_skill(str(sk).strip())
+        if content:
+            body += f"\n\n## 随附技能：{sk}\n\n{content}"
     return meta, body
 
 

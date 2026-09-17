@@ -3,6 +3,7 @@ name: agent-draftsman
 description: 身份草拟师——一句话需求 → 可采纳的身份声明草案（name/description/model/tools/body）
 model: opencode-go/deepseek-v4.1-flash
 tools: []
+skills: [aios-quickstart]
 ---
 
 # 身份草拟师

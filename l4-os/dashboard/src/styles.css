@@ -4090,3 +4090,22 @@ select {
 .aios-agent__form label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: #8a867c; }
 .aios-agent__form input, .aios-agent__form textarea { font: inherit; font-size: 12.5px; padding: 6px 8px; border: 1px solid #ddd9d0; border-radius: 7px; background: #ffffff; color: inherit; }
 .aios-agent__form textarea { resize: vertical; min-height: 64px; }
+
+/* 设置页（状态/配置/体检/关于） */
+.aios-modal__card.is-wide { width: min(880px, 94vw); }
+.aios-settings__tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid rgb(148, 163, 184, 0.2); }
+.aios-settings__tab { background: transparent; border: none; border-bottom: 2px solid transparent; color: rgb(148, 163, 184, 0.85); padding: 8px 12px; cursor: pointer; font-size: 13px; }
+.aios-settings__tab.is-active { color: #e2e8f0; border-bottom-color: #7dd3fc; }
+.aios-svc { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 10px; }
+.aios-svc__row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; background: rgb(148, 163, 184, 0.07); }
+.aios-svc__name { flex: 1; font-size: 13px; }
+.aios-svc__meta { color: rgb(148, 163, 184, 0.8); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.aios-wf__badge.is-pass { background: rgb(34, 197, 94, 0.18); color: #86efac; }
+.aios-wf__badge.is-fail { background: rgb(239, 68, 68, 0.18); color: #fca5a5; }
+.aios-wf__badge.is-warn { background: rgb(245, 158, 11, 0.18); color: #fcd34d; }
+.aios-wf__badge.is-skip { background: rgb(148, 163, 184, 0.15); color: #cbd5e1; }
+.aios-cfg__area { width: 100%; min-height: 300px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; background: rgb(2, 6, 23, 0.6); color: #e2e8f0; border: 1px solid rgb(148, 163, 184, 0.25); border-radius: 8px; padding: 10px; box-sizing: border-box; }
+.aios-cfg__msg { color: #86efac; font-size: 12px; margin-top: 6px; }
+.aios-diag__item { padding: 6px 8px; border-radius: 6px; background: rgb(148, 163, 184, 0.06); margin-bottom: 4px; }
+.aios-diag__head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.aios-diag__detail { color: rgb(148, 163, 184, 0.85); font-size: 12px; margin: 2px 0 0; word-break: break-all; }

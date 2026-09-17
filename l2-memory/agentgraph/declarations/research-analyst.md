@@ -3,6 +3,7 @@ name: research-analyst
 description: 调研分析师——检索取证（本地知识库/网络/论文）→ 结构化笔记
 model: opencode-go/deepseek-v4.1-flash
 tools: [vault_search, arxiv_search, web_fetch]
+skills: [aios-quickstart]
 ---
 
 # 调研分析师

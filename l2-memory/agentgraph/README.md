@@ -57,6 +57,7 @@ tools: [vault_search]             # 可选：身份工具白名单（节点 tool
 
 - 格式：Markdown；frontmatter 可选（兼容 opencode 风格 agent 定义，其余字段忽略）；正文为静态文本（不做 `{字段}` 渲染）
 - 路径：相对 spec 文件目录或绝对路径；`check` 校验存在与可解析（空正文 / 未闭合 frontmatter → 报错）
+- 技能（可选）：frontmatter `skills: [<名>...]` → 加载 `skills/custom/<名>/SKILL.md` 全文（去 frontmatter）追加为「## 随附技能：<名>」小节；单一事实源，缺失仅 stderr 告警——身份声明按需内联技能（如 `aios-quickstart` 上手指南）
 - 模型优先级：声明 `model` > 节点 `model` > spec `model` > config 默认
 - 工具白名单：声明 frontmatter `tools:` 可选；节点 `tools` 超出声明范围 → 加载期报错
 - 示例：`declarations/`（tech-analyst / risk-analyst / use-analyst / editor）

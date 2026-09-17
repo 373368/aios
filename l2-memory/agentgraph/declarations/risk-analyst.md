@@ -1,7 +1,8 @@
 ---
 name: risk-analyst
 description: 风险分析师——风险、局限与反例视角
-model: volcengine-agent-plan/deepseek-v4-flash
+model: opencode-go/deepseek-v4.1-flash
+skills: [aios-quickstart]
 ---
 
 # 风险分析师

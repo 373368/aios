@@ -1,7 +1,8 @@
 ---
 name: tech-analyst
 description: 技术分析师——技术可行性、路线与成熟度视角
-model: volcengine-agent-plan/deepseek-v4-flash
+model: opencode-go/deepseek-v4.1-flash
+skills: [aios-quickstart]
 ---
 
 # 技术分析师

@@ -323,6 +323,10 @@ def run_workflow(wf_path, args):
         scope.local[var] = scope.eval(expr)
     for act in wf.get("actions", []):
         run_action(scope, act)
+    # 工作流级 outputs：完成后向 stdout 回显 {字段: 值}（供 wfctl/控制台结果面板展示）
+    outs = wf.get("outputs") or []
+    if outs:
+        print(json.dumps({k: scope.local.get(k) for k in outs}, ensure_ascii=False))
     log(wf["metadata"]["name"], f"完成 actions={len(wf.get('actions', []))}")
     return scope.local
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Activity,
   MessageSquare,
@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { SettingsDialog } from "./settings-dialog";
 
 type AiosPanel = "workspace" | "workflows" | "chat";
 
@@ -57,130 +58,6 @@ function PanelFrame({ title, onClose, children }: { title: string; onClose: () =
       </header>
       <div className="aios-panel__body">{children}</div>
     </section>
-  );
-}
-
-interface StatusSummary {
-  ok: boolean;
-  goal_count: number;
-  run_count: number;
-  warnings: string[];
-  goals: {
-    id: string;
-    display_name: string;
-    lifecycle_phase: string;
-    status: string;
-    waiting_on?: string;
-    quota: { state: string; spent_slots: number; allowed_slots: number };
-    user_todos: string[];
-    agent_todos: string[];
-  }[];
-}
-
-/** 只读系统状态概况：经壳代理拉取 loopx serve-status /status.json */
-function parseStatus(raw: unknown): StatusSummary {
-  const r = (raw ?? {}) as Record<string, any>;
-  const attention = Array.isArray(r.attention_queue?.items) ? r.attention_queue.items : [];
-  const goals = attention.map((it: any) => {
-    const proj = it.goal_channel_projection ?? {};
-    const ut = proj.user_todos ?? it.user_todos?.first_open_items ?? [];
-    const at = proj.agent_todos ?? it.agent_todos?.first_open_items ?? [];
-    const q = proj.quota ?? it.project_asset?.quota ?? {};
-    return {
-      id: it.goal_id ?? "",
-      display_name: proj.display_name ?? it.goal_id ?? "",
-      lifecycle_phase: it.lifecycle_phase ?? "",
-      status: proj.latest_status ?? it.status ?? "",
-      waiting_on: proj.waiting_on ?? it.waiting_on,
-      quota: {
-        state: q.state ?? "",
-        spent_slots: Number(q.spent_slots ?? 0),
-        allowed_slots: Number(q.allowed_slots ?? 0),
-      },
-      user_todos: (ut as any[]).map((t) => t.title ?? t.text ?? "").filter(Boolean),
-      agent_todos: (at as any[]).map((t) => t.title ?? t.text ?? "").filter(Boolean),
-    };
-  });
-  const warnings = Array.isArray(r.contract_warnings) ? r.contract_warnings.map(String) : [];
-  return { ok: !!r.ok, goal_count: Number(r.goal_count ?? 0), run_count: Number(r.run_count ?? 0), warnings, goals };
-}
-
-function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const [status, setStatus] = useState<StatusSummary | null>(null);
-  const [err, setErr] = useState("");
-
-  const load = useCallback(async () => {
-    setErr("");
-    try {
-      const resp = await fetch("/status.json");
-      if (!resp.ok) throw new Error(`status ${resp.status}`);
-      setStatus(parseStatus(await resp.json()));
-    } catch (e) {
-      setErr(String(e));
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  return (
-    <div className="aios-modal" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="aios-modal__card" onClick={(e) => e.stopPropagation()}>
-        <header className="aios-modal__bar">
-          <span>系统状态</span>
-          <button onClick={onClose} aria-label="关闭设置">
-            <X size={16} />
-          </button>
-        </header>
-        <div className="aios-modal__body">
-          <div className="aios-sys__bar">
-            <span>{status ? (status.ok ? "服务正常" : "服务异常") : "加载中…"}</span>
-            <button className="aios-topbar__btn" onClick={load} aria-label="刷新">刷新</button>
-          </div>
-          {err && <p className="aios-wf__err">{err}</p>}
-          {status && (
-            <>
-              <p className="aios-sys__meta">目标 {status.goal_count} · 运行 {status.run_count}</p>
-              {status.goals.map((g) => (
-                <div className="aios-sys__goal" key={g.id}>
-                  <div className="aios-sys__goalHead">
-                    <strong>{g.display_name}</strong>
-                    <span className="aios-wf__badge is-run">{g.status}</span>
-                  </div>
-                  <p className="aios-sys__sub">
-                    生命周期 {g.lifecycle_phase}
-                    {g.waiting_on ? ` · 等待 ${g.waiting_on}` : ""} · 配额
-                    {g.quota.state}（已用 {g.quota.spent_slots}/{g.quota.allowed_slots}）
-                  </p>
-                  {g.user_todos.length > 0 && (
-                    <ul className="aios-sys__todos">
-                      {g.user_todos.map((t, i) => (
-                        <li key={i}>【用户】{t}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {g.agent_todos.length > 0 && (
-                    <ul className="aios-sys__todos">
-                      {g.agent_todos.map((t, i) => (
-                        <li key={i}>【代理】{t}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
-              {status.warnings.length > 0 && (
-                <div className="aios-sys__warn">
-                  {status.warnings.map((w, i) => (
-                    <p key={i}>{w}</p>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
   );
 }
 

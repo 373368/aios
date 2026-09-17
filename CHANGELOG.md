@@ -2,6 +2,15 @@
 
 版本号与本地便携包 `aios-<版本>-win64.zip` 对应；未发布 GitHub Release。
 
+## 0.4.0 — 2026-09-17
+
+- 控制台设置页：状态（服务端口探测 + goals）/ 配置（config.json 在线编辑，校验 + 自动备份）/ 体检 / 关于
+- `diagnostics.py` 体检条例：环境（Python/依赖）/ 配置（config/路径）/ 引擎（能力目录 · 原语自检 · spec 校验 · 工具池 · 演示）/ 连通（opencode 端口 + 模型 ping）
+- `demo-hello` 演示工作流（开箱即跑，无外部依赖）+ 工作流级 `outputs:` 回显到结果面板
+- 身份声明 frontmatter 新增 `skills:`：内联 `skills/custom/<名>/SKILL.md` 全文（单一事实源）
+- 壳新增路由：`/wfctl/services · diagnostics · config-get · config-set`
+- 新增 `aios-quickstart` 上手 skill
+
 ## 0.3.1 — 2026-09-17
 
 - 便携包补齐 `skills/custom/`（系统 skills：工作流 / 记忆 / 分类 / 归档）+ 安装说明（含 `AIOS_*` 环境变量）

@@ -456,6 +456,11 @@ public partial class MainWindow : Window
         if (path.StartsWith("/wfctl/", StringComparison.OrdinalIgnoreCase))
             sub = path.Substring("/wfctl/".Length);
 
+        // 壳侧直连端点（不走 wfctl.py）：服务探测 / 体检 / 配置读写
+        if (sub is "services") { await ServeServicesAsync(ctx); return; }
+        if (sub is "diagnostics") { await ServeDiagnosticsAsync(ctx); return; }
+        if (sub is "config-get" or "config-set") { await ServeConfigAsync(ctx, sub!); return; }
+
         var args = new List<string> { Paths.WfctlPy };
         var name = ctx.Request.QueryString["name"];
 
@@ -580,6 +585,134 @@ public partial class MainWindow : Window
             await ctx.Response.OutputStream.WriteAsync(b);
         }
         ctx.Response.Close();
+    }
+
+    /// <summary>服务连通状态：壳 TCP 探测自身相关服务端口（设置页/体检用）</summary>
+    private static async Task ServeServicesAsync(HttpListenerContext ctx)
+    {
+        var probes = new (string Id, string Name, int Port, string Url)[]
+        {
+            ("console", "控制台静态服务（壳）", 8799, "http://127.0.0.1:8799/"),
+            ("status", "loopx 状态服务", 8766, "http://127.0.0.1:8766/status.json"),
+            ("chat", "Chat 写通道", 8767, "http://127.0.0.1:8767/"),
+            ("opencode-modelz", "opencode 模型通道（kind=opencode）", 4399, "http://127.0.0.1:4399/"),
+            ("opencode", "opencode 面板", 4400, "http://127.0.0.1:4400/"),
+            ("openscience", "OpenScience 面板", 4401, "http://127.0.0.1:4401/"),
+        };
+        var items = new List<object>();
+        foreach (var pr in probes)
+        {
+            var up = await PortIsListeningAsync(pr.Port);
+            items.Add(new { id = pr.Id, name = pr.Name, port = pr.Port, url = pr.Url, up });
+        }
+        ctx.Response.StatusCode = 200;
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        ctx.Response.Headers["Cache-Control"] = "no-cache";
+        await WriteAsync(ctx, JsonSerializer.Serialize(new { ok = true, services = items }));
+        ctx.Response.Close();
+    }
+
+    /// <summary>体检：转发 l2-memory/scripts/diagnostics.py（quick/ping），stdout JSON 原样返回</summary>
+    private static async Task ServeDiagnosticsAsync(HttpListenerContext ctx)
+    {
+        var mode = ctx.Request.QueryString["mode"] == "ping" ? "ping" : "quick";
+        var psi = new ProcessStartInfo(PythonExe)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+        psi.ArgumentList.Add(Path.Combine(Paths.Root, "l2-memory", "scripts", "diagnostics.py"));
+        psi.ArgumentList.Add("--mode");
+        psi.ArgumentList.Add(mode);
+
+        using var p = Process.Start(psi) ?? throw new InvalidOperationException("无法启动 diagnostics.py");
+        var stdout = await p.StandardOutput.ReadToEndAsync();
+        var stderr = await p.StandardError.ReadToEndAsync();
+        await p.WaitForExitAsync();
+
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        ctx.Response.Headers["Cache-Control"] = "no-cache";
+        if (stdout.TrimStart().StartsWith("{"))
+        {
+            ctx.Response.StatusCode = 200;
+            await WriteAsync(ctx, stdout);
+        }
+        else
+        {
+            ctx.Response.StatusCode = 500;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new { exit = p.ExitCode, output = stdout, error = stderr }));
+        }
+        ctx.Response.Close();
+    }
+
+    /// <summary>配置读写：config-get 返回原文；config-set 校验 + 备份 + 原子写（UTF-8 无 BOM）。json 从 query 或 POST body 取。</summary>
+    private static async Task ServeConfigAsync(HttpListenerContext ctx, string sub)
+    {
+        var cfgPath = Path.Combine(Paths.Root, "l2-memory", "config.json");
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        ctx.Response.Headers["Cache-Control"] = "no-cache";
+
+        try
+        {
+            if (sub == "config-get")
+            {
+                if (!File.Exists(cfgPath))
+                    throw new InvalidOperationException("config.json 不存在（可从 config.example.json 复制）");
+                var text = await File.ReadAllTextAsync(cfgPath, Encoding.UTF8);
+                ctx.Response.StatusCode = 200;
+                await WriteAsync(ctx, JsonSerializer.Serialize(new { ok = true, path = cfgPath, text }));
+                ctx.Response.Close();
+                return;
+            }
+
+            // config-set
+            string? json = ctx.Request.QueryString["json"];
+            if (string.IsNullOrEmpty(json) && ctx.Request.HasEntityBody)
+            {
+                using var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8);
+                json = await reader.ReadToEndAsync();
+            }
+            if (string.IsNullOrEmpty(json)) throw new InvalidOperationException("缺 json（query 或 body）");
+
+            using (var doc = JsonDocument.Parse(json))
+            {
+                if (!doc.RootElement.TryGetProperty("models", out var models) ||
+                    !models.TryGetProperty("default", out var def) ||
+                    string.IsNullOrWhiteSpace(def.GetString()))
+                    throw new InvalidOperationException("校验失败：缺少 models.default");
+            }
+
+            var backup = cfgPath + ".bak-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            if (File.Exists(cfgPath)) File.Copy(cfgPath, backup, overwrite: true);
+            await File.WriteAllTextAsync(cfgPath, json, new UTF8Encoding(false));
+            ctx.Response.StatusCode = 200;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new
+            {
+                ok = true,
+                path = cfgPath,
+                backup = Path.GetFileName(backup),
+                bytes = Encoding.UTF8.GetByteCount(json),
+            }));
+        }
+        catch (Exception ex)
+        {
+            ctx.Response.StatusCode = 500;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new { ok = false, error = ex.Message }));
+        }
+        ctx.Response.Close();
+    }
+
+    private static async Task WriteAsync(HttpListenerContext ctx, string s)
+    {
+        var b = Encoding.UTF8.GetBytes(s);
+        await ctx.Response.OutputStream.WriteAsync(b);
     }
 
     /// <summary>

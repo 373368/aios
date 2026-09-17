@@ -29,10 +29,11 @@ AI-OS 运行治理的**约定面**。把「特定场景多原语编排」写成 
 | 公共层 | `<repo>\l2-memory\scripts\common.py`（run_py/run_capture/log/锁/退出码） |
 | agent 图运行时 | `<repo>\l2-memory\agentgraph\agentgraph.py`（LangGraph 声明式并行 agents） |
 | agent spec | `<repo>\l2-memory\agentgraph\specs\*.yaml` |
-| agent 身份声明 | `<repo>\l2-memory\agentgraph\declarations\*.md`（正文=人设/规范/提示词 → system；frontmatter 可选 name/description/model/tools） |
+| agent 身份声明 | `<repo>\l2-memory\agentgraph\declarations\*.md`（正文=人设/规范/提示词 → system；frontmatter 可选 name/description/model/tools/**skills**——`skills: [<名>...]` 内联 `skills/custom/<名>/SKILL.md` 全文为「随附技能」小节，缺失仅告警） |
 | agent 工具池 | `<repo>\l2-memory\agentgraph\tools.py`（vault_search / arxiv_search / web_fetch 内置；节点 `tools:` 回路，声明可设白名单） |
 | 工具注册表 | `<repo>\l2-memory\agentgraph\tools_registry.yaml`（扩展工具声明：kind=http/script/plugin；`register_tool` 原语写入 + smoke 自检；动态合并进 TOOLS） |
 | 工具草案 | `<repo>\l2-memory\agentgraph\drafts\*.tool.json`（tool-scout 产出；`adopt_tool_draft` 采纳后改名 `*.adopted.json` 留痕） |
+| 体检脚本 | `<repo>\l2-memory\scripts\diagnostics.py`（`--mode quick\|ping`；环境/配置/引擎自检/模型连通；控制台设置页「体检」的后端） |
 
 ## 执行命令
 
@@ -45,6 +46,8 @@ python <repo>\l2-memory\workflows\wfengine.py <workflow.yaml> [key=value ...]
 - **tool-scout**（工具侦察·源搜索三源）：`... tool-scout.yaml brief="<需求>" [url=<参考网址>]`（本地盘点 + GitHub + 指定网址 → 候选清单 + 注册条目草案落盘 `agentgraph/drafts/`；采纳走 `adopt_tool_draft` 原语——校验 + smoke 通过才进注册表）
 - **agent-forge**（身份工厂，机读入口）：`... agent-forge.yaml plan=<清单 JSON 或文件路径>`（批量声明身份；同名跳过逐项报告；`dry_run=true` 预览）
 - **agent-draft**（身份草拟，spec）：由 `python wfctl.py agents-suggest --brief "<文本>"` 调用（brief → 建议 name/description/model/tools/body；只读不落盘，提交仍走 agents-declare 严格校验）
+- **demo-hello**（演示）：`... demo-hello.yaml [name=世界]`（最小链路开箱样例：SetVariable 默认链 → InvokeLLM（judge 直连）→ 结果经 `outputs:` 回显；无外部依赖）
+- **体检**（非工作流，直跑脚本）：`python <repo>\l2-memory\scripts\diagnostics.py --mode quick`（或 `--mode ping` 追加模型连通）——退出码 0=全过（warn 不拦）
 - 自带冒烟示例：`wf-selfcheck.yaml`（引擎自检）/ `wf-test-judge.yaml`（判断点单测）/ `wf-test-source.yaml`（自定义 API 源 + `$ENV` key 引用）
 
 **契约**：统一入口（触发器只认 `wfengine.py <yaml> [k=v]`）+ 退出码 0=成功 / 非 0=失败 + 运行日志追加 `<vault>\03-日志\wfengine.log` 与 `<工作流名>.log`。并发防重入用 `common.SingleLock`（`main_entry` 封装，锁冲突退出码 3）。
@@ -60,6 +63,7 @@ trigger: {kind: OnCommand, command: archive, required: [source]}
                                                # 可选 arguments: [{name, type, hint, required, options}] — 详情页表单元数据（type=text|longtext|bool|select）
 variables:                                     # 顶部变量，可被 actions 引用
   source: =System.Args.source
+outputs: [字段名, ...]                          # 可选：完成后向 stdout 回显 {字段: Local 值}（控制台结果面板；demo-hello 示范）
 model: =System.Args.model   # 可选：本工作流默认 LLM 源（缺省 =System.JudgeModel）
 sources:                    # 可选：自定义 API 源（合并进 config.json models.providers；同名逐字段覆盖）
   my-source:
@@ -165,6 +169,7 @@ agent 图 = `<repo>\l2-memory\agentgraph\`（YAML spec → LangGraph StateGraph�
 | 能力目录 | `python wfctl.py catalog` | workflows（arguments/invokes）+ agents specs（inputs/declarations/invoked_by）；过滤 `ui_hidden` 工作流与 `*-smoke` spec；附漂移检查 `metadata_warnings` |
 | 直跑 spec | `python wfctl.py run-agent <spec> <k=v...>` | 必填输入预检 exit 2 → `agentgraph run --json`；single-flight 锁（已有运行 exit 3）；stdout/退出码透传 |
 | AI 填充 | `python wfctl.py agents-suggest --brief <文本>` | brief → 身份草案建议（name/description/model/tools/body；只读不落盘） |
+| 体检 | `python <repo>\l2-memory\scripts\diagnostics.py --mode quick\|ping` | 环境/配置/引擎自检（+模型连通）统一入口；控制台设置页「体检」后端（JSON：items[]/summary） |
 | 身份清单 | `python wfctl.py agents` | 身份声明（`agentgraph/declarations`）+ 各 goal 注册状态（JSON） |
 | 注册身份 | `python wfctl.py agents-register --agent-id <a[,b...]> --goal-id <g> [--execute]` | 加入 goal 协作名单（缺省预览；loopx 侧要求 goal 已存在；逗号串需拆为重复参数） |
 | 移除身份 | `python wfctl.py agents-unregister --agent-id <a[,b...]> --goal-id <g> [--execute]` | 从 goal 名单移除（configure-goal 名单替换语义 + 全局同步） |
@@ -194,6 +199,7 @@ agent 使用路径：`list`/`catalog` 发现 → `status`/`render` 监控 → `t
 - [ ] `wfengine.py <yaml> [k=v]` 退出码 0，`03-日志/wfengine.log` 有记录
 - [ ] digest-daily 可执行（`dry_run=true` 预览不落盘）；`wf-selfcheck.yaml` 跑通
 - [ ] `wfctl.py catalog` 输出 workflows + agents（inputs/invokes/ui_hidden 过滤）；`run-agent` 直跑冒烟 spec exit 0
+- [ ] 体检全绿：`python <repo>\l2-memory\scripts\diagnostics.py --mode quick`（exit 0；warn 允许）
 - [ ] 工具工厂闭环：`tool-scout` 产出草案 → `adopt_tool_draft` 采纳（smoke 过）→ 新进程 TOOLS 含该工具
 - [ ] 新增工作流遵循本 schema，判断点输出 JSON 含 branch 且骨架白名单一致
 - [ ] 写操作全走 primitives（skill 内嵌命令形态已消除）

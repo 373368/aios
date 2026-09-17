@@ -1,0 +1,28 @@
+kind: Workflow
+metadata:
+  name: demo-hello
+  description: 演示：一句话问候（最小链路，仅需 judge 直连模型，无外部依赖）
+  version: 0.1
+trigger:
+  kind: OnCommand
+  command: demo-hello
+  arguments:
+    - {name: name, type: text, required: false, hint: 问候对象（默认「世界」）}
+variables:
+  name: =System.Args.name
+outputs: [Greeting]
+actions:
+  - kind: SetVariable
+    var: name
+    value: 世界
+  - kind: SetVariable
+    var: name
+    value: =System.Args.name
+    when: =System.Args.name
+  - kind: InvokeLLM
+    id: greet
+    model: =System.JudgeModel
+    prompt_template: demo_hello
+    input: =Local.name
+    output:
+      Greeting: =Local

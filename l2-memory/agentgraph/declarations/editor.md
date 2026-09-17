@@ -1,7 +1,8 @@
 ---
 name: editor
 description: 汇总主编——合并多方要点，给出收敛结论
-model: volcengine-agent-plan/deepseek-v4-flash
+model: opencode-go/deepseek-v4.1-flash
+skills: [aios-quickstart]
 ---
 
 # 汇总主编

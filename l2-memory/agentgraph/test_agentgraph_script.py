@@ -182,9 +182,22 @@ def main():
     except SystemExit as e:
         assert "超出声明白名单" in str(e), f"错误信息不符: {e}"
 
+    # 5e: 声明 skills——内联 skills/custom/<名>/SKILL.md（单一事实源）；缺失仅告警不中断
+    d10 = os.path.join(tmp, "decl-skills.md")
+    with open(d10, "w", encoding="utf-8") as f:
+        f.write("---\nname: skill-agent\nskills: [aios-quickstart]\n---\n你是带技能的身份。\n")
+    _meta10, body10 = ag.load_declaration(d10)
+    assert "## 随附技能：aios-quickstart" in body10, "skills 未内联"
+    assert "便携包" in body10, "技能内容缺失"
+    d11 = os.path.join(tmp, "decl-skills-miss.md")
+    with open(d11, "w", encoding="utf-8") as f:
+        f.write("---\nname: skill-agent2\nskills: [no-such-skill]\n---\n正文。\n")
+    _meta11, body11 = ag.load_declaration(d11)
+    assert "随附技能" not in body11, "缺失技能不应内联"
+
     print("OK: 原语节点离线测试通过 | 链路 ✓ / json ✓ / 失效可见 ✓（加载期+运行期）| "
           "outputs 契约 ✓（未知字段/未接线）| 声明身份 ✓（解析/缺失/空正文/模型优先）| "
-          "工具白名单 ✓（未知拦截/在册通过/声明越权拦截）")
+          "工具白名单 ✓（未知拦截/在册通过/声明越权拦截）| 声明 skills ✓（内联/缺失告警）")
 
 
 if __name__ == "__main__":

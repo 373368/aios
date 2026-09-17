@@ -3,6 +3,7 @@ name: tool-scout
 description: 工具选型师——按需求侦察本地/GitHub/指定网址，产出可注册的工具条目草案
 model: opencode-go/deepseek-v4.1-flash
 tools: [github_search, web_fetch, vault_search]
+skills: [aios-quickstart]
 ---
 
 # 工具选型师
