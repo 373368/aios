@@ -327,22 +327,40 @@ public partial class MainWindow : Window
         catch { try { ctx.Response.StatusCode = 500; ctx.Response.Close(); } catch { } }
     }
 
-    /// <summary>把 /status.json /healthz 转发到 loopx Chat 服务（其 /status.json 投影包含全部 goal；serve-status 仅含运行过 run 的 goal）</summary>
+    /// <summary>把 /status.json /healthz 转发到 loopx Chat 服务（其投影含全部 goal；serve-status 仅含运行过 run 的 goal）。
+    /// loopx 为可选组件：两路都不可用时返回降级 JSON（HTTP 200），不阻断控制台。</summary>
     private static async Task ProxyToStatusAsync(HttpListenerContext ctx, string path)
     {
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-        HttpResponseMessage resp;
-        try
+        HttpResponseMessage? resp = null;
+        if (await PortIsListeningAsync(ChatPort))
         {
-            resp = await client.GetAsync($"http://127.0.0.1:{ChatPort}{path}");
+            try { resp = await client.GetAsync($"http://127.0.0.1:{ChatPort}{path}"); }
+            catch (Exception) { resp = null; }
         }
-        catch (Exception)
+        if (resp == null && await PortIsListeningAsync(StatusPort))
         {
-            ctx.Response.StatusCode = 502;
-            ctx.Response.ContentType = "application/json";
+            try { resp = await client.GetAsync($"http://127.0.0.1:{StatusPort}{path}"); }
+            catch (Exception) { resp = null; }
+        }
+        if (resp == null)
+        {
+            // 降级：loopx 未接入（未安装/未启动）——返回 200 + 说明，控制台其余功能不受影响
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ContentType = "application/json; charset=utf-8";
             ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
-            var err = System.Text.Encoding.UTF8.GetBytes("{\"ok\":false,\"error\":\"chat upstream unavailable\"}");
-            await ctx.Response.OutputStream.WriteAsync(err);
+            var stub = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                ok = false,
+                degraded = true,
+                error = "loopx 未接入（可选组件）：实时状态不可用",
+                goal_count = 0,
+                run_count = 0,
+                attention_queue = new { items = Array.Empty<object>() },
+                contract_warnings = new[] { "loopx 服务未运行（可选组件）——实时状态 / goal 投影不可用；安装并启动 loopx 后自动恢复" },
+            });
+            var sb = System.Text.Encoding.UTF8.GetBytes(stub);
+            await ctx.Response.OutputStream.WriteAsync(sb);
             ctx.Response.Close();
             return;
         }
