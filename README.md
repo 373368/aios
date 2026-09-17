@@ -11,8 +11,7 @@ AI-OS：原语（primitives）/ 声明式工作流（wfengine）/ agent 图（ag
 | `l2-memory/` | 核心：原语库（`scripts/primitives.py`）、声明式工作流（`workflows/`）、agent 图（`agentgraph/`）、检索（`scripts/search_index.py`）、路径与模型适配（`paths.py` / `modelz.py`） |
 | `l4-os/` | 界面层：Windows 壳（`shell/AiosShell`）、Dashboard 源码（`dashboard/`）、服务脚本（`scripts/`） |
 | `l1-control/` | 控制层：opencode 会话纪律（`AGENTS.md`） |
-| `skills/custom/` | 系统 skills：declarative-workflows / memory / vault-digest / control-classify / archival 等 |
-| `docs/` | 架构与运行规范（三层体系 / 原语目录 / agent 设计规范，见 `docs/README.md`） |
+| `skills/custom/` | 系统 skills：declarative-workflows / memory / vault-digest / control-classify / archival |
 
 ## 快速开始
 
