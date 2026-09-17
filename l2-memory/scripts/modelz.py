@@ -224,7 +224,7 @@ def ensure_server(timeout=60):
         return SERVER_PORT
     if not os.path.exists(OPENCODE_EXE):
         raise ValueError(f"找不到 opencode 可执行文件: {OPENCODE_EXE or '（未配置）'}"
-                         f"——可用环境变量 MEMCORE_OPENCODE_EXE 或 config.json paths.opencode_exe 配置")
+                         f"——可用环境变量 AIOS_OPENCODE_EXE 或 config.json paths.opencode_exe 配置")
     subprocess.Popen([OPENCODE_EXE, "serve", "--port", str(SERVER_PORT)],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))

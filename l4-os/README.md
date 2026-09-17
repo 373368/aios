@@ -26,7 +26,7 @@ AI-OS 的主机侧服务栈：**壳（AiosShell）+ Dashboard（前端）+ loopx
 - **Dashboard 代码**：`dashboard/`（src → 构建到 `dashboard/dist`，壳托管静态文件）
 - **服务脚本**：`scripts/`（serve_chat.py 等）
 - **壳**：`shell/AiosShell/MainWindow.xaml.cs`（全部逻辑单文件）
-- **路径解析**：Python 侧 `<repo>/l2-memory/scripts/paths.py`、C# 侧 `shell/AiosShell/Paths.cs`；优先级 `MEMCORE_*` 环境变量 > `config.json` 的 `paths` 段 > 默认（仓库相对）
+- **路径解析**：Python 侧 `<repo>/l2-memory/scripts/paths.py`、C# 侧 `shell/AiosShell/Paths.cs`；优先级 `AIOS_*` 环境变量 > `config.json` 的 `paths` 段 > 默认（仓库相对）
 
 ## 2. 端口与服务
 

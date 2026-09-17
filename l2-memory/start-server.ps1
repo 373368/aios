@@ -1,9 +1,9 @@
 # 启动常驻 opencode server（固定密码，与 config.json server 段一致）
 # 用法: powershell -File start-server.ps1
-# opencode 可执行解析：config.json paths.opencode_exe > 环境变量 MEMCORE_OPENCODE_EXE > PATH
+# opencode 可执行解析：config.json paths.opencode_exe > 环境变量 AIOS_OPENCODE_EXE > PATH
 $cfg = Get-Content (Join-Path $PSScriptRoot "config.json") -Raw -Encoding UTF8 | ConvertFrom-Json
 $exe = $cfg.paths.opencode_exe
-if (-not $exe) { $exe = $env:MEMCORE_OPENCODE_EXE }
+if (-not $exe) { $exe = $env:AIOS_OPENCODE_EXE }
 if (-not $exe) { $exe = "opencode" }
 
 # 杀掉旧实例（端口占用）

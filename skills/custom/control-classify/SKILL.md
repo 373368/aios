@@ -21,7 +21,7 @@ description: 06-系统 控制知识 C1-C6 分类固化（sys_classify_sdk 机械
 
 ## 执行流程
 
-1. **初判（原语）**：`python <repo>\l2-memory\scripts\sys_classify_sdk.py`（全量 06-系统）或 `<某页.md>`（单页）。报告输出 `<logs>\sys_classify_report.json`（日志目录，`MEMCORE_LOGS` 可覆盖）。
+1. **初判（原语）**：`python <repo>\l2-memory\scripts\sys_classify_sdk.py`（全量 06-系统）或 `<某页.md>`（单页）。报告输出 `<logs>\sys_classify_report.json`（日志目录，`AIOS_LOGS` 可覆盖）。
 2. **精判（LLM）**：SDK 初判只是候选（verdict=candidate），LLM 复核分类与抽取结果再定稿。
 3. **落盘（按类路由）**：
    - C1 → 合并进 `<repo>\l1-control\opencode\AGENTS.md`（锚点短句，不删旧）

@@ -5,7 +5,7 @@
 路径解析见 l2-memory/scripts/paths.py（环境变量 > config.json["paths"] > 默认）。
 
 依赖：pip install loopx（第三方开源项目，Apache-2.0）；
-opencode / OpenScience 可经 MEMCORE_OPENCODE_EXE / MEMCORE_OPENSCIENCE_JS 配置。
+opencode / OpenScience 可经 AIOS_OPENCODE_EXE / AIOS_OPENSCIENCE_JS 配置。
 """
 import sys
 from pathlib import Path

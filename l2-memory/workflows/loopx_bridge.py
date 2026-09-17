@@ -4,7 +4,7 @@
 
 供 osrun-goal.py / goalrun.py 共用：loopx CLI 调用封装 + 路径常量。
 解析优先级：环境变量（LOOPX_CLI / LOOPX_REGISTRY / LOOPX_RUNTIME_ROOT）
-> paths.py（MEMCORE_LOOPX_EXE 等）> 默认值。
+> paths.py（AIOS_LOOPX_EXE 等）> 默认值。
 """
 from __future__ import annotations
 

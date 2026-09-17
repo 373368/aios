@@ -5,18 +5,18 @@ namespace AiosShell;
 
 /// <summary>
 /// 统一路径解析（开源可移植）：环境变量 > 仓库相对默认。
-/// 与 l2-memory/scripts/paths.py 同契约（MEMCORE_* 环境变量，config.json["paths"] 由 Python 侧消费）。
-/// 仓库根探测：环境变量 MEMCORE_ROOT，或从程序位置向上找含 l2-memory 的目录。
+/// 与 l2-memory/scripts/paths.py 同契约（AIOS_* 环境变量，config.json["paths"] 由 Python 侧消费）。
+/// 仓库根探测：环境变量 AIOS_ROOT，或从程序位置向上找含 l2-memory 的目录。
 /// </summary>
 internal static class Paths
 {
     public static readonly string Root = FindRoot();
-    public static readonly string Vault = Env("MEMCORE_VAULT") ?? Path.Combine(Root, "vault");
-    public static readonly string Python = Env("MEMCORE_PYTHON") ?? "python";
-    public static readonly string Node = Env("MEMCORE_NODE") ?? "node";
-    public static readonly string OpencodeExe = Env("MEMCORE_OPENCODE_EXE") ?? "opencode";
-    public static readonly string OpenScienceJs = Env("MEMCORE_OPENSCIENCE_JS") ?? "openscience";
-    public static readonly string LoopxCmd = Env("MEMCORE_LOOPX_EXE") ?? "loopx";
+    public static readonly string Vault = Env("AIOS_VAULT") ?? Path.Combine(Root, "vault");
+    public static readonly string Python = Env("AIOS_PYTHON") ?? "python";
+    public static readonly string Node = Env("AIOS_NODE") ?? "node";
+    public static readonly string OpencodeExe = Env("AIOS_OPENCODE_EXE") ?? "opencode";
+    public static readonly string OpenScienceJs = Env("AIOS_OPENSCIENCE_JS") ?? "openscience";
+    public static readonly string LoopxCmd = Env("AIOS_LOOPX_EXE") ?? "loopx";
 
     public static readonly string RuntimeRoot = Path.Combine(Root, ".loopx-runtime");
     public static readonly string ChatScript = Path.Combine(Root, "l4-os", "scripts", "serve_chat.py");
@@ -28,7 +28,7 @@ internal static class Paths
 
     private static string FindRoot()
     {
-        var fromEnv = Env("MEMCORE_ROOT");
+        var fromEnv = Env("AIOS_ROOT");
         if (!string.IsNullOrEmpty(fromEnv)) return fromEnv!;
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null)
