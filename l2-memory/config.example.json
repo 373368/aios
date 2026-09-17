@@ -40,6 +40,17 @@
         "base": "https://api.siliconflow.cn/v1",
         "api_key": "$ENV:SILICONFLOW_API_KEY",
         "models": ["deepseek-ai/DeepSeek-V4-Flash", "deepseek-ai/DeepSeek-V4-Pro", "zai-org/GLM-5.2"]
+      },
+      "opencode-go": {
+        "name": "OpenCode Go（zen gateway，OpenAI 兼容；可选）",
+        "kind": "openai",
+        "base": "https://opencode.ai/zen/go/v1",
+        "headers": {
+          "User-Agent": "modelz/0.1",
+          "x-opencode-session": "local-modelz"
+        },
+        "api_key": "$ENV:OPENCODE_GO_API_KEY",
+        "models": ["deepseek-v4.1-flash", "deepseek-v4-flash", "deepseek-v4-pro", "glm-5.3", "glm-5.3-flash", "kimi-k3", "minimax-m3", "grok-4.6"]
       }
     }
   },

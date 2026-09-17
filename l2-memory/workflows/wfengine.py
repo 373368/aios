@@ -135,6 +135,8 @@ def _interp(scope, raw):
 
 def _fmt_input(v):
     """agent --input 值格式：字符串原样，其余 JSON 序列化。"""
+    if isinstance(v, dict) and not v:
+        raise WFError("agent 输入求值为空对象（命令行参数缺失？请以 k=v 传入，或在 variables 给默认值）")
     return v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
 
 
@@ -243,6 +245,8 @@ def run_action(scope, act):
                 raise WFError(f"prompt 模板不存在: {path}")
             prompt = open(path, encoding="utf-8").read()
             inp = scope.eval(act.get("input"))
+            if isinstance(inp, dict) and not inp:
+                raise WFError("InvokeLLM input 求值为空对象（命令行参数缺失？）")
             if inp is not None:
                 prompt = prompt.replace("{content}", str(inp))
         else:

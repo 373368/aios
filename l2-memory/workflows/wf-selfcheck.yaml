@@ -3,6 +3,7 @@ metadata:
   name: wf-selfcheck
   description: 引擎自检：表达式/循环/分支/原语/LLM
   version: 1.0
+  ui_hidden: true   # 内部自检，不上面板
 
 trigger:
   kind: OnCommand

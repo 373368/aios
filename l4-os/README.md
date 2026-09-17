@@ -110,3 +110,10 @@ dotnet publish -c Release -o "bin\Release\net10.0-windows\publish"   # 发布版
 - 4401 OpenScience 绑定收紧需运行时验证
 - 协议不通背景：loopx 0.5.4 的 ACP 用旧式显式 session/new，与 codex 系 ACP 不兼容；B 路线 osrun-goal.py custom-runner 已验证跑通
 - 远程控制写端点 /goal/ /gate/ /config/ 已实现（非回环访问需密码认证）
+
+## 7. 2026-09-17 修复记录：Debug 版打开白屏
+
+- **现象**：Debug exe 打开后整页白屏（Release/publish 正常）。
+- **根因**：Debug 二进制停留旧构建，缺 `/wfctl/agents` 路由 → 该路径回退成 `wfctl list`（返回数组）→ 前端 `data.goals[0]` 未守护访问抛 TypeError → React 整树卸载白屏（控制台证据：`Cannot read properties of undefined (reading '0')`）。
+- **修复**：① `workflows-panel.tsx` `loadAgents` 加边界校验（响应非 `declarations`/`goals` 数组即报错降级显示，不再崩页）+ `registered_agents?.length` 守护；② 重建 Debug/Release/publish 三份 exe；③ `publish\dashboard-dist` 同步最新 `dist`。
+- **纪律**：改壳代码必须同步重建 **Debug + Release + publish** 三份；前端已加降级防线（接口不匹配只报错不白屏）。

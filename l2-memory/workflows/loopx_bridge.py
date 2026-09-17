@@ -38,8 +38,11 @@ def call(args, timeout=90):
     """调 loopx CLI（--format json）：返回 {ok, rc, payload, stderr, cmd}。"""
     cmd = [LOOPX, "--registry", REGISTRY, "--runtime-root", RUNTIME_ROOT,
            "--format", "json", *args]
+    # loopx CLI 的 stdout 在无控制台子进程中默认走 locale（GBK）编码；payload 含非 GBK 字符（如 ↔）
+    # 时 print 直接崩溃（UnicodeEncodeError）→ 子进程强制 UTF-8 模式（与 shell/serve 侧同一纪律）。
+    env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
     try:
-        p = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, timeout=timeout, env=env)
     except FileNotFoundError:
         return {"ok": False, "step": "loopx-not-found", "cmd": cmd}
     except subprocess.TimeoutExpired:

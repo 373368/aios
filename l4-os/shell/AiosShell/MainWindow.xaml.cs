@@ -125,7 +125,7 @@ public partial class MainWindow : Window
     /// <summary>登记子进程：加入连坐任务组，壳被强杀时由内核一并终结（防孤儿）</summary>
     private void TrackChild(Process p)
     {
-        TrackChild(p);
+        _children.Add(p);
         ChildProcessJob.Assign(_childJob, p);
     }
 
@@ -434,7 +434,7 @@ public partial class MainWindow : Window
         ctx.Response.Close();
     }
 
-    /// <summary>wfctl 代理：调 wfctl.py 暴露 list/render/status/trigger/agents/agents-register/agents-unregister/agents-declare 接口给前端</summary>
+    /// <summary>wfctl 代理：调 wfctl.py 暴露 list/catalog/render/status/trigger/run-agent/agents/agents-register/agents-unregister 接口给前端</summary>
     private static async Task ServeWfctlAsync(HttpListenerContext ctx)
     {
         var path = ctx.Request.Url?.AbsolutePath ?? "";
@@ -454,6 +454,20 @@ public partial class MainWindow : Window
                 foreach (string? k in ctx.Request.QueryString.AllKeys)
                     if (k is not null && k != "name")
                         args.Add($"{k}={ctx.Request.QueryString[k]}");
+        }
+        else if (sub is "catalog")
+        {
+            args.Add("catalog");
+        }
+        else if (sub is "run-agent")
+        {
+            // spec 直跑：spec 名 + 其它 query 参数作为 --input k=v
+            args.Add("run-agent");
+            var spec = ctx.Request.QueryString["spec"];
+            if (!string.IsNullOrEmpty(spec)) args.Add(spec);
+            foreach (string? k in ctx.Request.QueryString.AllKeys)
+                if (k is not null && k != "spec")
+                    args.Add($"{k}={ctx.Request.QueryString[k]}");
         }
         else if (sub is "agents")
         {
@@ -484,11 +498,18 @@ public partial class MainWindow : Window
         else if (sub is "agents-declare")
         {
             args.Add("agents-declare");
-            foreach (var key in new[] { "name", "description", "model", "body" })
+            foreach (var key in new[] { "name", "description", "model", "tools", "body" })
             {
                 var val = ctx.Request.QueryString[key];
                 if (!string.IsNullOrEmpty(val)) { args.Add("--" + key); args.Add(val); }
             }
+        }
+        else if (sub is "agents-suggest")
+        {
+            // AI 填充：brief → 身份草案建议（只读，不入盘）
+            args.Add("agents-suggest");
+            var brief = ctx.Request.QueryString["brief"];
+            if (!string.IsNullOrEmpty(brief)) { args.Add("--brief"); args.Add(brief); }
         }
         else
         {
@@ -517,9 +538,9 @@ public partial class MainWindow : Window
         ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
         ctx.Response.Headers["Cache-Control"] = "no-cache";
 
-        if (p.ExitCode == 0 && sub != "trigger")
+        if (p.ExitCode == 0 && sub != "trigger" && sub != "run-agent")
         {
-            // list/render/status 输出已是 JSON；status 是纯文本，整包成 JSON
+            // list/catalog/render/status/agents* 输出已是 JSON；status 是纯文本，整包成 JSON
             if (sub == "status")
             {
                 var txt = System.Text.Encoding.UTF8.GetBytes(
@@ -556,6 +577,7 @@ public partial class MainWindow : Window
     /// </summary>
     private static async Task ServeLoopxControlAsync(HttpListenerContext ctx, string kind, string path)
     {
+        // 解析 /goal/start 之类：kind + sub 拼成 loopx 命令
         var sub = path.Substring($"/{kind}/".Length).Trim('/');
         var args = new List<string>();
         if (kind == "goal" && sub == "start")

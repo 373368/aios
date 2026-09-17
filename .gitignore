@@ -37,5 +37,8 @@ l2-memory/chunks/
 l2-memory/logs/
 l2-memory/archive/
 
+# ── 工具工厂运行时草案（agentgraph/drafts；*.tool.json 采纳后留痕不入库）──
+l2-memory/agentgraph/drafts/
+
 # ── 构建/日志 ────────────────────────────────
 *.log

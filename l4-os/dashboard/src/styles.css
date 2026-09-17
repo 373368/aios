@@ -3819,6 +3819,100 @@ select {
   border-color: rgb(120, 160, 255, 0.6);
 }
 
+.aios-wf__arg textarea {
+  flex: 1;
+  background: rgb(10, 16, 26, 0.5);
+  border: 1px solid rgb(148, 163, 184, 0.2);
+  border-radius: 6px;
+  color: var(--aios-text, #e2e8f0);
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  resize: vertical;
+}
+
+.aios-wf__arg textarea:focus {
+  outline: none;
+  border-color: rgb(120, 160, 255, 0.6);
+}
+
+.aios-wf__bool {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.aios-wf__arg .aios-wf__bool span {
+  min-width: auto;
+  font-family: inherit;
+}
+
+/* 能力卡 + 详情页 */
+.aios-wf__card.is-clickable {
+  cursor: pointer;
+}
+
+.aios-wf__card.is-clickable:hover {
+  border-color: rgb(120, 160, 255, 0.45);
+}
+
+.aios-wf__kind {
+  font-size: 0.6875rem;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 999px;
+  border: 1px solid rgb(148, 163, 184, 0.25);
+  color: rgb(200, 210, 225, 0.7);
+}
+
+.aios-wf__kind.is-agent {
+  color: #a78bfa;
+  border-color: rgb(167, 139, 250, 0.4);
+}
+
+.aios-wf__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0.25rem;
+}
+
+.aios-wf__detailbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.aios-wf__detailbar strong {
+  color: #dff3ff;
+  font-size: 0.875rem;
+}
+
+.aios-wf__detailbar .aios-wf__badge {
+  margin-left: auto;
+}
+
+.aios-wf__path {
+  font-size: 0.6875rem;
+  color: rgb(148, 163, 184, 0.6);
+  font-family: ui-monospace, monospace;
+  margin: 0;
+  word-break: break-all;
+}
+
+.aios-agent__chiplink {
+  margin-left: 0.375rem;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 999px;
+  border: 1px solid rgb(120, 160, 255, 0.4);
+  background: rgb(120, 160, 255, 0.1);
+  color: #dff3ff;
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.aios-agent__chiplink:hover {
+  background: rgb(120, 160, 255, 0.2);
+}
+
 /* 工作流面板：页签 + 分组 + Agents 注册 */
 .aios-wf__tabs {
   display: flex;

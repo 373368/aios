@@ -1,12 +1,40 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+interface ArgSpec {
+  name: string;
+  type?: "text" | "longtext" | "bool" | "select";
+  hint?: string;
+  required?: boolean;
+  default?: string;
+  options?: string[];
+}
+
 interface WfItem {
   name: string;
   description: string;
   version: string;
   command: string;
   args: string[];
+  required?: string[];
+  arguments?: ArgSpec[] | null;
+  invokes?: string[];
   path: string;
+}
+
+interface SpecItem {
+  name: string;
+  description: string;
+  model: string;
+  inputs?: ArgSpec[];
+  outputs?: string[];
+  declarations?: string[];
+  invoked_by?: string[];
+  path: string;
+}
+
+interface CatalogData {
+  workflows: WfItem[];
+  agents: SpecItem[];
 }
 
 interface RenderState {
@@ -22,6 +50,7 @@ interface DeclItem {
   file: string;
   description: string;
   model: string;
+  tools: string[];
   path: string;
   registered_in: string[];
 }
@@ -38,6 +67,7 @@ interface GoalItem {
 interface AgentsData {
   declarations: DeclItem[];
   goals: GoalItem[];
+  tools_available?: string[];
 }
 
 interface RegisterPayload {
@@ -60,25 +90,29 @@ interface RegisterResult {
 }
 
 /**
- * 工作流面板：wfctl 接口（list/render/trigger + agents/agents-register）监控与触发。
+ * 能力面板：wfctl 接口（catalog/render/trigger/run-agent + agents/agents-register）监控与运行。
  * 经壳 AiosShell /wfctl 代理调 wfctl.py。
- * 两个页签：
- *  - 工作流：按管线分组的卡片（触发/状态）
- *  - Agents：身份声明（agentgraph/declarations）× loopx goal 注册（预览门 → 写入；
- *    Goal 名单可逐项移除，chip × → 确认条）
+ * 两个页签（均为「卡片列表 → 详情页」两态）：
+ *  - 工作流：按管线分组的任务卡（详情页 = 参数表单 + 运行 + 结果 + 调用 Agent 跳转）
+ *  - Agents：可运行 Agent（specs）卡 + 身份声明（agentgraph/declarations）× loopx goal 注册
+ *    （预览门 → 写入；Goal 名单可逐项移除，chip × → 确认条）
  */
 /** 常用参数说明（纯前端提示，不涉及数据；布尔类给固定选项下拉） */
 const ARG_HINTS: Record<string, { hint: string; options?: string[] }> = {
   source: { hint: "源目录路径，默认走收件箱" },
   skip_export: { hint: "是否跳过导出", options: ["", "true", "false"] },
   query: { hint: "检索关键词，留空全量" },
+  topic: { hint: "调研主题（必填，留空将直接报错）" },
+  brief: { hint: "工具需求描述（必填，越具体越好）" },
+  url: { hint: "参考网址（可选：指定页面供抓取参考）" },
 };
 
-/** 工作流分组（编排布局：按管线归类；未列出的归入「其他」） */
+/** 工作流分组（编排布局：按管线归类；未列出的归入「其他」）
+ *  机读任务（agent-forge / wf-selfcheck / wf-test-*）由 wfctl 按 ui_hidden 过滤，不上面板 */
 const WF_GROUPS: { title: string; names: string[] }[] = [
   { title: "记忆管线", names: ["digest-daily"] },
-  { title: "内容管线", names: ["archive-daily", "track-daily"] },
-  { title: "自检与冒烟", names: ["wf-selfcheck", "wf-test-agent", "wf-test-source", "wf-test-judge"] },
+  { title: "内容管线", names: ["archive-daily", "track-daily", "research"] },
+  { title: "工厂", names: ["tool-scout"] },
 ];
 
 const TAB_KEY = "aios-wf-tab";
@@ -99,6 +133,11 @@ export function WorkflowsPanel() {
   const [lastOut, setLastOut] = useState<Record<string, string>>({});
   const [loadErr, setLoadErr] = useState("");
   const [argsVal, setArgsVal] = useState<Record<string, Record<string, string>>>({});
+  // —— 能力目录 / 详情页状态 ——
+  const [specs, setSpecs] = useState<SpecItem[]>([]);
+  const [detail, setDetail] = useState<{ kind: "wf" | "agent"; name: string } | null>(null);
+  const [specRunning, setSpecRunning] = useState<string | null>(null);
+  const [specOut, setSpecOut] = useState<Record<string, string>>({});
   // —— Agents 页签状态 ——
   const [agents, setAgents] = useState<AgentsData | null>(null);
   const [agentsErr, setAgentsErr] = useState("");
@@ -112,20 +151,27 @@ export function WorkflowsPanel() {
   const [removeMsg, setRemoveMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // —— Agents：新建身份声明状态 ——
   const [declareOpen, setDeclareOpen] = useState(false);
-  const [declForm, setDeclForm] = useState({ name: "", description: "", model: "", body: "" });
+  const [declForm, setDeclForm] = useState({ name: "", description: "", model: "", tools: "", body: "" });
   const [declareBusy, setDeclareBusy] = useState(false);
   const [declareMsg, setDeclareMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // —— Agents：AI 填充（brief → 建议草案，只读） ——
+  const [suggestBrief, setSuggestBrief] = useState("");
+  const [suggestBusy, setSuggestBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const resp = await fetch("/wfctl/list");
-      if (!resp.ok) throw new Error(`list ${resp.status}`);
-      const data: WfItem[] = await resp.json();
-      setItems(data);
+      const resp = await fetch("/wfctl/catalog");
+      if (!resp.ok) throw new Error(`catalog ${resp.status}`);
+      const data: CatalogData = await resp.json();
+      if (!data || !Array.isArray(data.workflows) || !Array.isArray(data.agents)) {
+        throw new Error("catalog 响应结构不符（壳或 wfctl 版本过旧？）");
+      }
+      setItems(data.workflows);
+      setSpecs(data.agents);
       // 并行取各工作流状态
       const r: Record<string, RenderState> = {};
       await Promise.all(
-        data.map(async (it) => {
+        data.workflows.map(async (it) => {
           try {
             const res = await fetch(`/wfctl/render?name=${encodeURIComponent(it.name)}`);
             if (res.ok) r[it.name] = await res.json();
@@ -146,6 +192,10 @@ export function WorkflowsPanel() {
       const resp = await fetch("/wfctl/agents");
       if (!resp.ok) throw new Error(`agents ${resp.status}`);
       const data: AgentsData = await resp.json();
+      // 边界校验：旧壳/异常响应（如回退成 list 数组）直接报错降级，避免未守护访问把整页打白
+      if (!data || !Array.isArray(data.declarations) || !Array.isArray(data.goals)) {
+        throw new Error("agents 响应结构不符（壳或 wfctl 版本过旧？）");
+      }
       setAgents(data);
       setGoalSel((g) => g || data.goals[0]?.id || "");
     } catch (e) {
@@ -167,10 +217,10 @@ export function WorkflowsPanel() {
     }
   }
 
-  function setArg(name: string, arg: string, value: string) {
+  function setArg(scope: string, arg: string, value: string) {
     setArgsVal((prev) => ({
       ...prev,
-      [name]: { ...(prev[name] ?? {}), [arg]: value },
+      [scope]: { ...(prev[scope] ?? {}), [arg]: value },
     }));
   }
 
@@ -178,7 +228,7 @@ export function WorkflowsPanel() {
     setRunning(name);
     setLastOut((prev) => ({ ...prev, [name]: "" }));
     // 非空参数拼成 k=v 传 trigger（空的省略，走工作流默认值）
-    const kv = Object.entries(argsVal[name] ?? {})
+    const kv = Object.entries(argsVal[`wf:${name}`] ?? {})
       .filter(([, v]) => v.trim() !== "")
       .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
       .join("&");
@@ -191,6 +241,24 @@ export function WorkflowsPanel() {
     } finally {
       setRunning(null);
       load(); // 刷新状态
+    }
+  }
+
+  async function runSpec(name: string) {
+    setSpecRunning(name);
+    setSpecOut((prev) => ({ ...prev, [name]: "" }));
+    const kv = Object.entries(argsVal[`spec:${name}`] ?? {})
+      .filter(([, v]) => v.trim() !== "")
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join("&");
+    try {
+      const resp = await fetch(`/wfctl/run-agent?spec=${encodeURIComponent(name)}${kv ? "&" + kv : ""}`);
+      const data = await resp.json();
+      setSpecOut((prev) => ({ ...prev, [name]: data.output || data.error || `exit=${data.exit}` }));
+    } catch (e) {
+      setSpecOut((prev) => ({ ...prev, [name]: String(e) }));
+    } finally {
+      setSpecRunning(null);
     }
   }
 
@@ -304,6 +372,7 @@ export function WorkflowsPanel() {
       const qs = new URLSearchParams({ name });
       if (declForm.description.trim()) qs.set("description", declForm.description.trim());
       if (declForm.model.trim()) qs.set("model", declForm.model.trim());
+      if (declForm.tools.trim()) qs.set("tools", declForm.tools.trim());
       if (declForm.body.trim()) qs.set("body", declForm.body.trim());
       const resp = await fetch(`/wfctl/agents-declare?${qs.toString()}`);
       const raw = (await resp.json()) as Record<string, unknown>;
@@ -318,7 +387,7 @@ export function WorkflowsPanel() {
       }
       if (res.ok) {
         setDeclareMsg({ ok: true, text: `已创建 ${name}.md（可继续编辑文件补充正文）` });
-        setDeclForm({ name: "", description: "", model: "", body: "" });
+        setDeclForm({ name: "", description: "", model: "", tools: "", body: "" });
         await loadAgents();
       } else {
         setDeclareMsg({ ok: false, text: `创建失败：${res.error || "未知错误"}` });
@@ -327,6 +396,50 @@ export function WorkflowsPanel() {
       setDeclareMsg({ ok: false, text: `创建失败：${String(e)}` });
     } finally {
       setDeclareBusy(false);
+    }
+  }
+
+  // —— Agents：AI 填充（brief → 身份草案建议；只读不落盘，提交仍走 agents-declare 严格校验） ——
+  async function doSuggest() {
+    const brief = suggestBrief.trim();
+    if (!brief) return;
+    setSuggestBusy(true);
+    setDeclareMsg(null);
+    try {
+      const resp = await fetch(`/wfctl/agents-suggest?brief=${encodeURIComponent(brief)}`);
+      const raw = (await resp.json()) as Record<string, unknown>;
+      let res = raw as { ok?: boolean; error?: string; suggestion?: Record<string, unknown> };
+      // 壳在异常路径会包成 {exit, output, error}；把 output 里的 JSON 还原
+      if (raw && typeof raw.output === "string" && !("ok" in raw)) {
+        try {
+          res = JSON.parse(raw.output) as typeof res;
+        } catch {
+          res = { ok: false, error: String(raw.error || raw.output) };
+        }
+      }
+      if (res.ok && res.suggestion) {
+        const s = res.suggestion as {
+          name?: string;
+          description?: string;
+          model?: string;
+          tools?: string[];
+          body?: string;
+        };
+        setDeclForm({
+          name: s.name ?? "",
+          description: s.description ?? "",
+          model: s.model ?? "",
+          tools: (s.tools ?? []).join(", "),
+          body: s.body ?? "",
+        });
+        setDeclareMsg({ ok: true, text: "已由 AI 填充（可直接修改后创建）" });
+      } else {
+        setDeclareMsg({ ok: false, text: `AI 填充失败：${res.error || "未知错误"}` });
+      }
+    } catch (e) {
+      setDeclareMsg({ ok: false, text: `AI 填充失败：${String(e)}` });
+    } finally {
+      setSuggestBusy(false);
     }
   }
 
@@ -342,11 +455,75 @@ export function WorkflowsPanel() {
     return order.filter((t) => map.has(t)).map((t) => ({ title: t, list: map.get(t)! }));
   }, [items]);
 
+  function wfArgSpecs(it: WfItem): ArgSpec[] {
+    if (it.arguments) return it.arguments;
+    return (it.args ?? []).map((a) => ({
+      name: a,
+      type: ARG_HINTS[a]?.options ? "select" : "text",
+      hint: ARG_HINTS[a]?.hint,
+      required: it.required?.includes(a),
+      options: ARG_HINTS[a]?.options,
+    }));
+  }
+
+  function renderArgField(scope: string, a: ArgSpec) {
+    const val = argsVal[scope]?.[a.name] ?? "";
+    const set = (v: string) => setArg(scope, a.name, v);
+    return (
+      <label className="aios-wf__arg" key={a.name}>
+        <span className="aios-wf__argname">
+          {a.name}
+          {a.required ? " *" : ""}
+        </span>
+        {a.type === "bool" ? (
+          <span className="aios-wf__bool">
+            <input type="checkbox" checked={val === "true"} onChange={(e) => set(e.target.checked ? "true" : "")} />
+            <span>是</span>
+          </span>
+        ) : a.type === "select" ? (
+          <select value={val} onChange={(e) => set(e.target.value)}>
+            <option value="">{a.required ? "（必选）" : "（默认）"}</option>
+            {(a.options ?? []).map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        ) : a.type === "longtext" ? (
+          <textarea
+            rows={3}
+            value={val}
+            onChange={(e) => set(e.target.value)}
+            placeholder={a.required ? "必填" : "可选，留空用默认值"}
+          />
+        ) : (
+          <input
+            type="text"
+            value={val}
+            onChange={(e) => set(e.target.value)}
+            placeholder={a.required ? "必填" : "可选，留空用默认值"}
+          />
+        )}
+        <small className="aios-wf__arghint">{a.hint ?? (a.required ? "必填" : "留空用默认值")}</small>
+      </label>
+    );
+  }
+
   function renderWfCard(it: WfItem) {
     return (
-      <div className="aios-wf__card" key={it.name}>
+      <div
+        className="aios-wf__card is-clickable"
+        key={it.name}
+        role="button"
+        tabIndex={0}
+        onClick={() => setDetail({ kind: "wf", name: it.name })}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") setDetail({ kind: "wf", name: it.name });
+        }}
+      >
         <div className="aios-wf__head">
           <strong>{it.name}</strong>
+          <span className="aios-wf__kind">任务</span>
           {badge(renders[it.name]?.state)}
         </div>
         <p className="aios-wf__desc">{it.description}</p>
@@ -355,46 +532,133 @@ export function WorkflowsPanel() {
             最近: {renders[it.name]?.last_line}
           </p>
         )}
-        {it.args.length > 0 && (
-          <div className="aios-wf__args">
-            {it.args.map((arg) => {
-              const hint = ARG_HINTS[arg];
-              return (
-                <label className="aios-wf__arg" key={arg}>
-                  <span className="aios-wf__argname">{arg}</span>
-                  {hint?.options ? (
-                    <select
-                      value={argsVal[it.name]?.[arg] ?? ""}
-                      onChange={(e) => setArg(it.name, arg, e.target.value)}
-                    >
-                      {hint.options.map((o) => (
-                        <option key={o} value={o}>
-                          {o === "" ? "留空用默认值" : o}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      value={argsVal[it.name]?.[arg] ?? ""}
-                      onChange={(e) => setArg(it.name, arg, e.target.value)}
-                      placeholder="留空用默认值"
-                    />
-                  )}
-                  <small className="aios-wf__arghint">{hint?.hint ?? "参数值，留空使用工作流默认值"}</small>
-                </label>
-              );
-            })}
-          </div>
-        )}
+      </div>
+    );
+  }
+
+  function renderSpecCard(sp: SpecItem) {
+    return (
+      <div
+        className="aios-wf__card is-clickable"
+        key={sp.name}
+        role="button"
+        tabIndex={0}
+        onClick={() => setDetail({ kind: "agent", name: sp.name })}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") setDetail({ kind: "agent", name: sp.name });
+        }}
+      >
+        <div className="aios-wf__head">
+          <strong>{sp.name}</strong>
+          <span className="aios-wf__kind is-agent">Agent</span>
+        </div>
+        <p className="aios-wf__desc">{sp.description}</p>
+        <div className="aios-agent__chips">
+          {(sp.declarations ?? []).map((d) => (
+            <span className="aios-agent__chip" key={d}>{`身份 · ${d.replace(/\.md$/, "")}`}</span>
+          ))}
+          {(sp.invoked_by?.length ?? 0) > 0 && (
+            <span className="aios-agent__chip is-on">经 {(sp.invoked_by ?? []).join(" / ")} 运行</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderWfDetail(it: WfItem) {
+    const scope = `wf:${it.name}`;
+    const argSpecs = wfArgSpecs(it);
+    const blocked = argSpecs.some((a) => a.required && !(argsVal[scope]?.[a.name] ?? "").trim());
+    return (
+      <div className="aios-wf__detail">
+        <div className="aios-wf__detailbar">
+          <button className="aios-topbar__btn" type="button" onClick={() => setDetail(null)}>
+            ← 返回
+          </button>
+          <strong>{it.name}</strong>
+          <span className="aios-wf__kind">任务</span>
+          {badge(renders[it.name]?.state)}
+        </div>
+        <p className="aios-wf__desc">{it.description}</p>
+        <p className="aios-wf__path">{it.path}</p>
+        {argSpecs.length > 0 && <div className="aios-wf__args">{argSpecs.map((a) => renderArgField(scope, a))}</div>}
         <button
           className="aios-wf__trigger"
+          type="button"
           onClick={() => trigger(it.name)}
-          disabled={running !== null}
+          disabled={running !== null || blocked}
         >
-          {running === it.name ? "运行中…" : "触发"}
+          {running === it.name ? "运行中…" : "运行"}
         </button>
+        {(it.invokes?.length ?? 0) > 0 && (
+          <p className="aios-wf__last">
+            调用 Agent：
+            {(it.invokes ?? []).map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="aios-agent__chiplink"
+                onClick={() => setDetail({ kind: "agent", name: s })}
+              >
+                {s}
+              </button>
+            ))}
+          </p>
+        )}
         {lastOut[it.name] && <pre className="aios-wf__out">{lastOut[it.name]}</pre>}
+      </div>
+    );
+  }
+
+  function renderSpecDetail(sp: SpecItem) {
+    const scope = `spec:${sp.name}`;
+    const inputs = sp.inputs ?? [];
+    const blocked = inputs.some((a) => a.required && !(argsVal[scope]?.[a.name] ?? "").trim());
+    return (
+      <div className="aios-wf__detail">
+        <div className="aios-wf__detailbar">
+          <button className="aios-topbar__btn" type="button" onClick={() => setDetail(null)}>
+            ← 返回
+          </button>
+          <strong>{sp.name}</strong>
+          <span className="aios-wf__kind is-agent">Agent</span>
+        </div>
+        <p className="aios-wf__desc">{sp.description}</p>
+        <p className="aios-wf__path">{sp.path}</p>
+        <div className="aios-agent__chips">
+          {sp.model && <span className="aios-agent__chip">{sp.model}</span>}
+          {(sp.declarations ?? []).map((d) => (
+            <span className="aios-agent__chip" key={d}>{`身份 · ${d.replace(/\.md$/, "")}`}</span>
+          ))}
+          {(sp.outputs ?? []).map((o) => (
+            <span className="aios-agent__chip" key={o}>{`输出 · ${o}`}</span>
+          ))}
+        </div>
+        {inputs.length > 0 && <div className="aios-wf__args">{inputs.map((a) => renderArgField(scope, a))}</div>}
+        <button
+          className="aios-wf__trigger"
+          type="button"
+          onClick={() => runSpec(sp.name)}
+          disabled={specRunning !== null || blocked}
+        >
+          {specRunning === sp.name ? "运行中…" : "运行"}
+        </button>
+        {(sp.invoked_by?.length ?? 0) > 0 && (
+          <p className="aios-wf__last">
+            经工作流运行：
+            {(sp.invoked_by ?? []).map((w) => (
+              <button
+                key={w}
+                type="button"
+                className="aios-agent__chiplink"
+                onClick={() => setDetail({ kind: "wf", name: w })}
+              >
+                {w}
+              </button>
+            ))}
+          </p>
+        )}
+        {specOut[sp.name] && <pre className="aios-wf__out">{specOut[sp.name]}</pre>}
       </div>
     );
   }
@@ -441,6 +705,23 @@ export function WorkflowsPanel() {
   const goals = agents?.goals ?? [];
   const declarations = agents?.declarations ?? [];
 
+  const wfItem = detail?.kind === "wf" ? items.find((i) => i.name === detail.name) : undefined;
+  const spItem = detail?.kind === "agent" ? specs.find((s) => s.name === detail.name) : undefined;
+
+  function renderDetailMissing() {
+    return (
+      <div className="aios-wf__detail">
+        <div className="aios-wf__detailbar">
+          <button className="aios-topbar__btn" type="button" onClick={() => setDetail(null)}>
+            ← 返回
+          </button>
+          <strong>未找到</strong>
+        </div>
+        <p className="aios-workflows__hint">该能力可能已移除，或列表尚未加载。</p>
+      </div>
+    );
+  }
+
   return (
     <div className="aios-workflows">
       <div className="aios-wf__tabs" role="tablist" aria-label="面板页签">
@@ -471,7 +752,9 @@ export function WorkflowsPanel() {
         </button>
       </div>
 
-      {tab === "workflows" && (
+      {detail && (wfItem ? renderWfDetail(wfItem) : spItem ? renderSpecDetail(spItem) : renderDetailMissing())}
+
+      {!detail && tab === "workflows" && (
         <>
           {loadErr && <p className="aios-wf__err">{loadErr}</p>}
           {items.length === 0 && !loadErr && <p className="aios-workflows__hint">无可用工作流。</p>}
@@ -484,9 +767,13 @@ export function WorkflowsPanel() {
         </>
       )}
 
-      {tab === "agents" && (
+      {!detail && tab === "agents" && (
         <>
           {agentsErr && <p className="aios-wf__err">{agentsErr}</p>}
+
+          <p className="aios-wf__group">可运行 Agent（specs）</p>
+          {specs.map(renderSpecCard)}
+          {!specs.length && <p className="aios-workflows__hint">（无 spec 或 catalog 加载中）</p>}
 
           <div className="aios-agent__headrow">
             <p className="aios-wf__group">身份声明（agentgraph/declarations）</p>
@@ -503,6 +790,25 @@ export function WorkflowsPanel() {
           </div>
           {declareOpen && (
             <div className="aios-agent__form">
+              <label>
+                需求描述（AI 填充：一句话说明要什么样的 agent）
+                <textarea
+                  rows={2}
+                  value={suggestBrief}
+                  onChange={(e) => setSuggestBrief(e.target.value)}
+                  placeholder="如：盯 arXiv 上 LLM 推理方向的新论文，挑重点摘要给我"
+                />
+              </label>
+              <div className="aios-agent__actions">
+                <button
+                  className="aios-topbar__btn"
+                  type="button"
+                  onClick={doSuggest}
+                  disabled={suggestBusy || !suggestBrief.trim()}
+                >
+                  {suggestBusy ? "生成中…（约 10-40s）" : "AI 填充"}
+                </button>
+              </div>
               <label>
                 name（文件名：小写字母/数字/短横线）
                 <input
@@ -530,6 +836,24 @@ export function WorkflowsPanel() {
                   placeholder="如 volcengine-agent-plan/deepseek-v4-flash"
                 />
               </label>
+              <label>
+                工具（可选，逗号分隔；须在工具池内）
+                <input
+                  type="text"
+                  value={declForm.tools}
+                  onChange={(e) => setDeclForm((f) => ({ ...f, tools: e.target.value }))}
+                  placeholder="如 vault_search, web_fetch（留空=无工具）"
+                  list="tools-available"
+                />
+                <small className="aios-wf__arghint">
+                  可用：{(agents?.tools_available ?? []).join(" / ") || "（加载中）"}
+                </small>
+              </label>
+              <datalist id="tools-available">
+                {(agents?.tools_available ?? []).map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
               <label>
                 正文（人设/运行规范/输出要求；留空生成模板）
                 <textarea
@@ -608,6 +932,9 @@ export function WorkflowsPanel() {
                   </div>
                   {d.description && <p className="aios-agent__desc">{d.description}</p>}
                   <div className="aios-agent__chips">
+                    {(d.tools ?? []).map((t) => (
+                      <span className="aios-agent__chip" key={t}>{`工具 · ${t}`}</span>
+                    ))}
                     {d.registered_in.length > 0 ? (
                       d.registered_in.map((g) => (
                         <span className="aios-agent__chip is-on" key={g}>
@@ -640,7 +967,7 @@ export function WorkflowsPanel() {
                 {g.agent_model ? ` · agent_model: ${g.agent_model}` : ""}
               </p>
               <div className="aios-agent__chips">
-                {g.registered_agents.length ? (
+                {g.registered_agents?.length ? (
                   g.registered_agents.map((a) => (
                     <span className="aios-agent__chip is-on" key={a}>
                       {a}

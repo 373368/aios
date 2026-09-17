@@ -13,6 +13,8 @@ metadata:
 trigger:
   kind: OnCommand
   command: digest
+  arguments:
+    - {name: dry_run, type: bool, hint: 预览：拦截全部写/标记动作}
 
 actions:
   # 1) 扫描待沉淀记忆（未 digested，跳过 TODO.md）
