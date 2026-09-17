@@ -71,46 +71,52 @@ public partial class MainWindow : Window
         catch { return false; }
     }
 
-    /// <summary>拉起 loopx serve-status（D 盘 runtime，本地回环；已监听则跳过）</summary>
+    /// <summary>拉起 loopx serve-status（本地回环；命令缺失时静默降级，不阻塞 UI）</summary>
     private async void StartStatusServer()
     {
-        if (await PortIsListeningAsync(StatusPort)) return;
-        var psi = new ProcessStartInfo("loopx")
+        try
         {
-            ArgumentList = {
+            if (await PortIsListeningAsync(StatusPort)) return;
+            var p = StartHidden(Paths.LoopxCmd, new[]
+            {
                 "--runtime-root", RuntimeRoot,
                 "serve-status",
                 "--port", StatusPort.ToString(),
                 "--global-registry",
-            },
-            WindowStyle = ProcessWindowStyle.Hidden,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        var p = Process.Start(psi) ?? throw new InvalidOperationException("无法启动 loopx serve-status");
-        TrackChild(p);
+            });
+            if (p == null) return;
+            DrainProcessPipes(p);
+            TrackChild(p);
+        }
+        catch { /* 可选外部组件：缺失时降级 */ }
     }
 
-    /// <summary>拉起 loopx Chat 服务（serve_chat，8767，供 /api/* 写通道；已监听则跳过）</summary>
+    /// <summary>拉起 loopx Chat 服务（serve_chat，8767，供 /api/* 写通道；python/依赖缺失时静默降级）</summary>
     private async void StartChatServer()
     {
-        if (await PortIsListeningAsync(ChatPort)) return;
-        var psi = new ProcessStartInfo(PythonExe)
+        try
         {
-            ArgumentList = { Paths.ChatScript },
-            WindowStyle = ProcessWindowStyle.Hidden,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardOutputEncoding = System.Text.Encoding.UTF8,
-            StandardErrorEncoding = System.Text.Encoding.UTF8,
-        };
-        // Python 默认按 locale(GBK) 读 ACP agent 子进程输出，遇 UTF-8 中文抛 UnicodeDecodeError → apply 424
-        psi.Environment["PYTHONUTF8"] = "1";
-        var p = Process.Start(psi) ?? throw new InvalidOperationException("无法启动 loopx chat 服务");
-        DrainProcessPipes(p);
-        TrackChild(p);
+            if (await PortIsListeningAsync(ChatPort)) return;
+            var psi = new ProcessStartInfo(PythonExe)
+            {
+                ArgumentList = { Paths.ChatScript },
+                WindowStyle = ProcessWindowStyle.Hidden,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WorkingDirectory = Paths.Root,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8,
+                StandardErrorEncoding = System.Text.Encoding.UTF8,
+            };
+            // Python 默认按 locale(GBK) 读 ACP agent 子进程输出，遇 UTF-8 中文抛 UnicodeDecodeError → apply 424
+            psi.Environment["PYTHONUTF8"] = "1";
+            var p = Process.Start(psi);
+            if (p == null) return;
+            DrainProcessPipes(p);
+            TrackChild(p);
+        }
+        catch { /* 可选外部组件：缺失时降级 */ }
     }
 
     /// <summary>重定向了 stdout/stderr 但无人读取 → 管道缓冲填满后子进程写日志永久阻塞（serve_chat 卡死根因）。异步排空防止此问题。</summary>
@@ -129,45 +135,53 @@ public partial class MainWindow : Window
         ChildProcessJob.Assign(_childJob, p);
     }
 
-    /// <summary>拉起 opencode serve（顶栏 Chat 面板 iframe 目标，经 /oc/ 代理注入认证；已监听则跳过）</summary>
-    private async void StartOpencodeServer()
+    /// <summary>隐藏启动外部命令（经 cmd.exe 解析 .cmd/.exe 垫片；命令缺失或启动失败返回 null，调用方静默降级）。</summary>
+    private static Process? StartHidden(string command, IEnumerable<string> args)
     {
-        if (await PortIsListeningAsync(OpencodePort)) return;
-        var psi = new ProcessStartInfo(Paths.OpencodeExe)
+        var psi = new ProcessStartInfo("cmd.exe")
         {
-            ArgumentList = { "serve", "--port", OpencodePort.ToString(), "--hostname", "127.0.0.1" },
-            WindowStyle = ProcessWindowStyle.Hidden,
             UseShellExecute = false,
             CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            WorkingDirectory = Paths.Root,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
-        // 密码：用户级环境变量（HKCU:\Environment）已固化，任何新进程自动继承
-        var p = Process.Start(psi) ?? throw new InvalidOperationException("无法启动 opencode serve");
-        DrainProcessPipes(p);
-        TrackChild(p);
+        psi.ArgumentList.Add("/c");
+        psi.ArgumentList.Add(command);
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        try { return Process.Start(psi); } catch { return null; }
     }
 
-    /// <summary>拉起 OpenScience serve（顶栏 Chat 面板可选 agent，node + bin 入口，无认证；已监听则跳过）</summary>
+    /// <summary>拉起 opencode serve（顶栏 Chat 面板 iframe 目标，经 /oc/ 代理注入认证；缺失时静默降级）</summary>
+    private async void StartOpencodeServer()
+    {
+        try
+        {
+            if (await PortIsListeningAsync(OpencodePort)) return;
+            // 经 cmd 解析 npm 垫片（opencode.cmd）；凭据走用户级环境变量（HKCU:\Environment）自动继承
+            var p = StartHidden(Paths.OpencodeExe, new[] { "serve", "--port", OpencodePort.ToString(), "--hostname", "127.0.0.1" });
+            if (p == null) return;
+            DrainProcessPipes(p);
+            TrackChild(p);
+        }
+        catch { /* 可选外部组件：缺失时降级 */ }
+    }
+
+    /// <summary>拉起 OpenScience serve（顶栏 Chat 面板可选 agent；缺失时静默降级）</summary>
     private async void StartOpenScienceServer()
     {
-        if (await PortIsListeningAsync(OpenSciencePort)) return;
-        var psi = new ProcessStartInfo(Paths.Node)
+        try
         {
-            ArgumentList = { Paths.OpenScienceJs, "serve", "--port", OpenSciencePort.ToString() },
-            WindowStyle = ProcessWindowStyle.Hidden,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardOutputEncoding = System.Text.Encoding.UTF8,
-            StandardErrorEncoding = System.Text.Encoding.UTF8,
-        };
-        var p = Process.Start(psi) ?? throw new InvalidOperationException("无法启动 OpenScience serve");
-        DrainProcessPipes(p);
-        TrackChild(p);
+            if (await PortIsListeningAsync(OpenSciencePort)) return;
+            var p = StartHidden(Paths.OpenScienceJs, new[] { "serve", "--port", OpenSciencePort.ToString() });
+            if (p == null) return;
+            DrainProcessPipes(p);
+            TrackChild(p);
+        }
+        catch { /* 可选外部组件：缺失时降级 */ }
     }
 
     /// <summary>内嵌静态服务：serve dashboard dist + /status.json 转发到 8766</summary>
