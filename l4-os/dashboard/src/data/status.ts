@@ -916,6 +916,8 @@ export const statusPayloadSchema = z.object({
   ok: z.boolean(),
   // 降级标记：壳在 loopx 未接入时返回空载荷（ok=false, degraded=true），UI 显示提示条而非错误屏
   degraded: z.boolean().optional().default(false),
+  // 降级原因：loopx-missing（未安装）/ loopx-uninitialized（未建档）/ 其他（原样展示）
+  degraded_reason: z.string().nullish(),
   registry: z.string(),
   runtime_root: z.string(),
   goal_count: z.number(),

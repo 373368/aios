@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Windows;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Web.WebView2.Core;
 using System.IO;
 using System.Web;
@@ -345,55 +346,91 @@ public partial class MainWindow : Window
         }
         if (resp == null)
         {
-            // 降级：loopx 未接入（未安装/未启动）——返回 200 + 完整结构载荷
-            // （字段必须满足 dashboard 的 statusPayloadSchema，否则前端 Zod 校验失败会回落「无法加载实时状态」错误屏）
-            ctx.Response.StatusCode = 200;
-            ctx.Response.ContentType = "application/json; charset=utf-8";
-            ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
-            var stub = System.Text.Json.JsonSerializer.Serialize(new
-            {
-                ok = false,
-                degraded = true,
-                registry = "",
-                runtime_root = "",
-                goal_count = 0,
-                run_count = 0,
-                status_contract = new
-                {
-                    schema_version = 0,
-                    minimum_dashboard_schema_version = 0,
-                    producer = "aios-shell-degraded",
-                    reload_hint = (string?)null,
-                },
-                local_dashboard_api = new { source = "shell-degraded", status_url = "/status.json" },
-                contract = new
-                {
-                    ok = true,
-                    summary = new { errors = 0, warnings = 0, checks = 0 },
-                    errors = Array.Empty<string>(),
-                    warnings = new[] { "loopx 未接入（可选组件）：实时状态与 goal 投影不可用；安装并启动 loopx 后自动恢复" },
-                },
-                attention_queue = new
-                {
-                    available = false,
-                    item_count = 0,
-                    needs_user_or_controller = 0,
-                    needs_codex = 0,
-                    watching_external_evidence = 0,
-                    items = Array.Empty<object>(),
-                },
-            });
-            var sb = System.Text.Encoding.UTF8.GetBytes(stub);
-            await ctx.Response.OutputStream.WriteAsync(sb);
-            ctx.Response.Close();
+            // loopx 未接入（未安装/未启动）→ 降级载荷 + 引导（不再走错误屏）
+            await EmitDegradedStatusAsync(ctx, "loopx-missing",
+                "loopx 未接入：打开 设置 → 初始化 完成安装与建档（完成后自动恢复）");
             return;
         }
         var body = await resp.Content.ReadAsByteArrayAsync();
+        var text = System.Text.Encoding.UTF8.GetString(body);
+        if (LooksLoopxUninitialized(text))
+        {
+            // loopx 已装但 registry 缺失（未初始化）→ 归入降级引导，健康面板不报错
+            await EmitDegradedStatusAsync(ctx, "loopx-uninitialized",
+                "loopx 未初始化（未创建 registry）：打开 设置 → 初始化 完成建档后自动恢复");
+            return;
+        }
         ctx.Response.StatusCode = (int)resp.StatusCode;
         ctx.Response.ContentType = resp.Content.Headers.ContentType?.ToString() ?? "application/json";
         ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
         await ctx.Response.OutputStream.WriteAsync(body);
         ctx.Response.Close();
+    }
+
+    /// <summary>降级状态载荷：字段满足 dashboard 的 statusPayloadSchema；degraded_reason 供前端定制文案</summary>
+    private static async Task EmitDegradedStatusAsync(HttpListenerContext ctx, string reason, string message)
+    {
+        ctx.Response.StatusCode = 200;
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        var stub = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            ok = false,
+            degraded = true,
+            degraded_reason = reason,
+            registry = "",
+            runtime_root = "",
+            goal_count = 0,
+            run_count = 0,
+            status_contract = new
+            {
+                schema_version = 0,
+                minimum_dashboard_schema_version = 0,
+                producer = "aios-shell-degraded",
+                reload_hint = (string?)null,
+            },
+            local_dashboard_api = new { source = "shell-degraded", status_url = "/status.json" },
+            contract = new
+            {
+                ok = true,
+                summary = new { errors = 0, warnings = 0, checks = 0 },
+                errors = Array.Empty<string>(),
+                warnings = new[] { message },
+            },
+            attention_queue = new
+            {
+                available = false,
+                item_count = 0,
+                needs_user_or_controller = 0,
+                needs_codex = 0,
+                watching_external_evidence = 0,
+                items = Array.Empty<object>(),
+            },
+        });
+        var sb = System.Text.Encoding.UTF8.GetBytes(stub);
+        await ctx.Response.OutputStream.WriteAsync(sb);
+        ctx.Response.Close();
+    }
+
+    /// <summary>loopx 已装但未初始化：contract.errors 仅有 registry 缺失类错误时判真</summary>
+    private static bool LooksLoopxUninitialized(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("contract", out var contract)) return false;
+            if (!contract.TryGetProperty("errors", out var errors) ||
+                errors.ValueKind != System.Text.Json.JsonValueKind.Array) return false;
+            var seen = false;
+            foreach (var e in errors.EnumerateArray())
+            {
+                var s = e.GetString() ?? "";
+                if (s.Contains("registry file does not exist", StringComparison.OrdinalIgnoreCase)) seen = true;
+                else return false;
+            }
+            return seen;
+        }
+        catch { return false; }
     }
 
     /// <summary>把 /api/* 转发到 loopx Chat 服务（保留 method / query / body；8s 超时快速失败防级联卡死）</summary>
@@ -502,6 +539,14 @@ public partial class MainWindow : Window
         if (sub is "services") { await ServeServicesAsync(ctx); return; }
         if (sub is "diagnostics") { await ServeDiagnosticsAsync(ctx); return; }
         if (sub is "config-get" or "config-set") { await ServeConfigAsync(ctx, sub!); return; }
+        if (sub is "config-presets") { await ServeConfigPresetsAsync(ctx); return; }
+        if (sub is "config-apply") { await ServeConfigApplyAsync(ctx); return; }
+        if (sub is "setup-status") { await ServeSetupStatusAsync(ctx); return; }
+        if (sub is "setup-install-deps") { await ServeSetupRunAsync(ctx, "deps"); return; }
+        if (sub is "setup-install-loopx") { await ServeSetupRunAsync(ctx, "loopx"); return; }
+        if (sub is "setup-init-loopx") { await ServeSetupInitLoopxAsync(ctx); return; }
+        if (sub is "setup-set-python") { await ServeSetupSetPythonAsync(ctx); return; }
+        if (sub is "restart-shell") { await ServeRestartShellAsync(ctx); return; }
 
         var args = new List<string> { Paths.WfctlPy };
         var name = ctx.Request.QueryString["name"];
@@ -671,6 +716,10 @@ public partial class MainWindow : Window
         psi.ArgumentList.Add(Path.Combine(Paths.Root, "l2-memory", "scripts", "diagnostics.py"));
         psi.ArgumentList.Add("--mode");
         psi.ArgumentList.Add(mode);
+        psi.ArgumentList.Add("--shell-python");
+        psi.ArgumentList.Add(Paths.Python);
+        psi.ArgumentList.Add("--shell-vault");
+        psi.ArgumentList.Add(Paths.Vault);
 
         using var p = Process.Start(psi) ?? throw new InvalidOperationException("无法启动 diagnostics.py");
         var stdout = await p.StandardOutput.ReadToEndAsync();
@@ -749,6 +798,363 @@ public partial class MainWindow : Window
             await WriteAsync(ctx, JsonSerializer.Serialize(new { ok = false, error = ex.Message }));
         }
         ctx.Response.Close();
+    }
+
+    /// <summary>配置预设（常见模型源模板）：读 l2-memory/config.presets.json 原样返回</summary>
+    private static async Task ServeConfigPresetsAsync(HttpListenerContext ctx)
+    {
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        ctx.Response.Headers["Cache-Control"] = "no-cache";
+        try
+        {
+            var file = Path.Combine(Paths.Root, "l2-memory", "config.presets.json");
+            if (!File.Exists(file)) throw new InvalidOperationException("缺少 config.presets.json");
+            var text = await File.ReadAllTextAsync(file, Encoding.UTF8);
+            using (JsonDocument.Parse(text)) { /* JSON 合法性校验 */ }
+            ctx.Response.StatusCode = 200;
+            await WriteAsync(ctx, text);
+        }
+        catch (Exception ex)
+        {
+            ctx.Response.StatusCode = 500;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new { ok = false, error = ex.Message }));
+        }
+        ctx.Response.Close();
+    }
+
+    /// <summary>一键应用模型源：写 config.json（provider + 默认模型）+ API key 写入用户级环境变量</summary>
+    private static async Task ServeConfigApplyAsync(HttpListenerContext ctx)
+    {
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        try
+        {
+            string body;
+            using (var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8))
+                body = await reader.ReadToEndAsync();
+            if (string.IsNullOrWhiteSpace(body)) throw new InvalidOperationException("缺 body（JSON: preset_id/api_key/set_default）");
+
+            using var req = JsonDocument.Parse(body);
+            var presetId = req.RootElement.TryGetProperty("preset_id", out var pid) ? pid.GetString() : null;
+            var apiKey = req.RootElement.TryGetProperty("api_key", out var ak) ? ak.GetString() : null;
+            var setDefault = !req.RootElement.TryGetProperty("set_default", out var sd) || sd.GetBoolean();
+            if (string.IsNullOrWhiteSpace(presetId)) throw new InvalidOperationException("缺 preset_id");
+            if (string.IsNullOrWhiteSpace(apiKey)) throw new InvalidOperationException("缺 api_key");
+
+            var presetsFile = Path.Combine(Paths.Root, "l2-memory", "config.presets.json");
+            using var presets = JsonDocument.Parse(await File.ReadAllTextAsync(presetsFile, Encoding.UTF8));
+            JsonElement? preset = null;
+            foreach (var item in presets.RootElement.GetProperty("presets").EnumerateArray())
+            {
+                if (item.GetProperty("id").GetString() == presetId) { preset = item; break; }
+            }
+            if (preset == null) throw new InvalidOperationException($"未找到预设: {presetId}");
+
+            var provider = preset.Value.GetProperty("provider").GetString()!;
+            var envName = preset.Value.GetProperty("env").GetString()!;
+            var cfgPath = Path.Combine(Paths.Root, "l2-memory", "config.json");
+
+            var rootNode = File.Exists(cfgPath)
+                ? (JsonNode.Parse(await File.ReadAllTextAsync(cfgPath, Encoding.UTF8)) as JsonObject ?? new JsonObject())
+                : new JsonObject();
+            var models = rootNode["models"] as JsonObject ?? new JsonObject();
+            rootNode["models"] = models;
+            var providers = models["providers"] as JsonObject ?? new JsonObject();
+            models["providers"] = providers;
+
+            var providerObj = new JsonObject
+            {
+                ["kind"] = preset.Value.GetProperty("kind").GetString(),
+                ["base"] = preset.Value.GetProperty("base").GetString(),
+                ["api_key"] = "$ENV:" + envName,
+            };
+            if (preset.Value.TryGetProperty("headers", out var headers))
+                providerObj["headers"] = JsonNode.Parse(headers.GetRawText());
+            var modelsArr = new JsonArray();
+            foreach (var m in preset.Value.GetProperty("models").EnumerateArray()) modelsArr.Add(m.GetString());
+            providerObj["models"] = modelsArr;
+            providers[provider] = providerObj;
+
+            if (setDefault)
+            {
+                models["default"] = preset.Value.GetProperty("default").GetString();
+                models["judge_default"] = preset.Value.GetProperty("judge_default").GetString();
+            }
+
+            var backup = cfgPath + ".bak-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            if (File.Exists(cfgPath)) File.Copy(cfgPath, backup, overwrite: true);
+            await File.WriteAllTextAsync(cfgPath,
+                rootNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
+                new UTF8Encoding(false));
+
+            // API key → 用户级环境变量（新进程可见）+ 当前进程（立即生效）
+            Environment.SetEnvironmentVariable(envName, apiKey, EnvironmentVariableTarget.User);
+            Environment.SetEnvironmentVariable(envName, apiKey, EnvironmentVariableTarget.Process);
+
+            ctx.Response.StatusCode = 200;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new
+            {
+                ok = true,
+                provider,
+                env = envName,
+                default_model = setDefault ? models["default"]!.GetValue<string>() : null,
+                note = "API key 已写入用户级环境变量；config.json 已更新并留备份",
+            }));
+        }
+        catch (Exception ex)
+        {
+            ctx.Response.StatusCode = 500;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new { ok = false, error = ex.Message }));
+        }
+        ctx.Response.Close();
+    }
+
+    /// <summary>初始化向导状态：python / 依赖 / 配置 / loopx（安装+建档）四项体检</summary>
+    private static async Task ServeSetupStatusAsync(HttpListenerContext ctx)
+    {
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        ctx.Response.Headers["Cache-Control"] = "no-cache";
+        try
+        {
+            var python = Paths.Python;
+            var pyVersion = ""; var pythonOk = false;
+            try
+            {
+                var (c, o) = await RunCaptureAsync(python, new[] { "--version" }, 20000);
+                pythonOk = c == 0;
+                pyVersion = o.Trim();
+            }
+            catch (Exception ex) { pyVersion = ex.Message; }
+
+            var missing = ""; var depsOk = false;
+            try
+            {
+                const string probe =
+                    "import importlib.util as u;print(','.join(m for m in ['yaml','requests','pydantic','langchain_core','langgraph'] if u.find_spec(m) is None))";
+                var (c, o) = await RunCaptureAsync(python, new[] { "-c", probe }, 60000);
+                if (c == 0) { missing = o.Trim(); depsOk = missing.Length == 0; }
+                else missing = "探测失败";
+            }
+            catch { missing = "探测失败"; }
+
+            var cfgOk = false; var cfgDefault = "";
+            try
+            {
+                var cfgPath = Path.Combine(Paths.Root, "l2-memory", "config.json");
+                if (File.Exists(cfgPath))
+                {
+                    using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(cfgPath, Encoding.UTF8));
+                    cfgDefault = doc.RootElement.TryGetProperty("models", out var models) &&
+                                 models.TryGetProperty("default", out var def) ? (def.GetString() ?? "") : "";
+                    cfgOk = cfgDefault.Length > 0;
+                }
+            }
+            catch { }
+
+            var lxVersion = ""; var loopxInstalled = false;
+            try
+            {
+                var (c, o) = await RunCaptureAsync(Paths.LoopxCmd, new[] { "--version" }, 20000);
+                loopxInstalled = c == 0;
+                lxVersion = o.Trim();
+            }
+            catch (Exception ex) { lxVersion = ex.Message; }
+
+            var registry = Path.Combine(Paths.Root, ".loopx", "registry.json");
+            var loopxInitialized = File.Exists(registry);
+
+            ctx.Response.StatusCode = 200;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new
+            {
+                ok = pythonOk && depsOk && cfgOk && loopxInstalled && loopxInitialized,
+                python = new { path = python, ok = pythonOk, version = pyVersion },
+                deps = new { ok = depsOk, missing },
+                config = new { ok = cfgOk, default_model = cfgDefault },
+                loopx = new { installed = loopxInstalled, initialized = loopxInitialized, version = lxVersion, registry },
+            }));
+        }
+        catch (Exception ex)
+        {
+            ctx.Response.StatusCode = 500;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new { ok = false, error = ex.Message }));
+        }
+        ctx.Response.Close();
+    }
+
+    /// <summary>初始化向导动作：安装 Python 依赖 / 安装 loopx（pip，耗时较长）</summary>
+    private static async Task ServeSetupRunAsync(HttpListenerContext ctx, string kind)
+    {
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        try
+        {
+            List<string> args;
+            if (kind == "deps")
+            {
+                args = new List<string> { "-m", "pip", "install", "-r",
+                    Path.Combine(Paths.Root, "l2-memory", "requirements.txt") };
+            }
+            else
+            {
+                args = new List<string> { "-m", "pip", "install", "loopx" };
+            }
+            var (code, output) = await RunCaptureAsync(Paths.Python, args, 600000);
+            var tail = output.Length > 4000 ? output[^4000..] : output;
+            ctx.Response.StatusCode = 200;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new { ok = code == 0, exit = code, output = tail }));
+        }
+        catch (Exception ex)
+        {
+            ctx.Response.StatusCode = 500;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new { ok = false, error = ex.Message }));
+        }
+        ctx.Response.Close();
+    }
+
+    /// <summary>初始化 loopx：创建 registry + 首个 goal（bootstrap）</summary>
+    private static async Task ServeSetupInitLoopxAsync(HttpListenerContext ctx)
+    {
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        try
+        {
+            string body;
+            using (var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8))
+                body = await reader.ReadToEndAsync();
+            using var req = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+            var goalId = req.RootElement.TryGetProperty("goal_id", out var g) ? (g.GetString() ?? "") : "";
+            var displayName = req.RootElement.TryGetProperty("display_name", out var d) ? (d.GetString() ?? "") : "";
+            var objective = req.RootElement.TryGetProperty("objective", out var o) ? (o.GetString() ?? "") : "";
+            if (string.IsNullOrWhiteSpace(goalId)) throw new InvalidOperationException("缺 goal_id（小写字母/数字/连字符）");
+            if (string.IsNullOrWhiteSpace(displayName)) displayName = goalId;
+            if (string.IsNullOrWhiteSpace(objective)) objective = "AI-OS 控制台初始化目标";
+
+            var registry = Path.Combine(Paths.Root, ".loopx", "registry.json");
+            var args = new List<string>
+            {
+                "--registry", registry,
+                "--runtime-root", Paths.RuntimeRoot,
+                "bootstrap",
+                "--project", Paths.Root,
+                "--goal-id", goalId,
+                "--display-name", displayName,
+                "--objective", objective,
+                "--no-onboarding-scan",
+                "--codex-app-heartbeat", "no",
+            };
+            var (code, output) = await RunCaptureAsync(Paths.LoopxCmd, args, 180000);
+            var tail = output.Length > 4000 ? output[^4000..] : output;
+            ctx.Response.StatusCode = 200;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new
+            {
+                ok = code == 0 && File.Exists(registry),
+                exit = code,
+                registry,
+                output = tail,
+            }));
+        }
+        catch (Exception ex)
+        {
+            ctx.Response.StatusCode = 500;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new { ok = false, error = ex.Message }));
+        }
+        ctx.Response.Close();
+    }
+
+    /// <summary>初始化向导：校验并写入 AIOS_PYTHON（用户级环境变量，重启壳生效）</summary>
+    private static async Task ServeSetupSetPythonAsync(HttpListenerContext ctx)
+    {
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        try
+        {
+            string body;
+            using (var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8))
+                body = await reader.ReadToEndAsync();
+            using var req = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+            var path = req.RootElement.TryGetProperty("path", out var p) ? (p.GetString() ?? "") : "";
+            if (string.IsNullOrWhiteSpace(path)) throw new InvalidOperationException("缺 path（python.exe 完整路径）");
+            if (!File.Exists(path)) throw new InvalidOperationException($"文件不存在: {path}");
+
+            var (code, output) = await RunCaptureAsync(path, new[] { "--version" }, 20000);
+            if (code != 0) throw new InvalidOperationException($"该路径不是可用的 Python：{output.Trim()}");
+
+            Environment.SetEnvironmentVariable("AIOS_PYTHON", path, EnvironmentVariableTarget.User);
+            ctx.Response.StatusCode = 200;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new
+            {
+                ok = true,
+                version = output.Trim(),
+                note = "已写入用户级环境变量 AIOS_PYTHON；点击「重启壳」后生效",
+            }));
+        }
+        catch (Exception ex)
+        {
+            ctx.Response.StatusCode = 500;
+            await WriteAsync(ctx, JsonSerializer.Serialize(new { ok = false, error = ex.Message }));
+        }
+        ctx.Response.Close();
+    }
+
+    /// <summary>重启壳：延迟拉起新实例并退出当前实例（先让旧实例清理孤儿服务）</summary>
+    private static async Task ServeRestartShellAsync(HttpListenerContext ctx)
+    {
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        ctx.Response.StatusCode = 200;
+        await WriteAsync(ctx, JsonSerializer.Serialize(new { ok = true, note = "正在重启壳…" }));
+        ctx.Response.Close();
+
+        var exe = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exe)) return;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("cmd.exe")
+                {
+                    Arguments = $"/c ping -n 3 127.0.0.1 >nul & start \"\" \"{exe}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                });
+            }
+            catch { }
+            Application.Current?.Dispatcher.Invoke(() => Application.Current.Shutdown());
+        });
+        await Task.CompletedTask;
+    }
+
+    /// <summary>通用子进程捕获（UTF-8 输出 + 超时保护；统一注入 PYTHONUTF8）</summary>
+    private static async Task<(int code, string output)> RunCaptureAsync(string exe, IEnumerable<string> args, int timeoutMs)
+    {
+        var psi = new ProcessStartInfo(exe)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        psi.Environment["PYTHONUTF8"] = "1";
+        psi.Environment["PYTHONIOENCODING"] = "utf-8";
+        using var p = Process.Start(psi) ?? throw new InvalidOperationException($"无法启动 {exe}");
+        var stdoutTask = p.StandardOutput.ReadToEndAsync();
+        var stderrTask = p.StandardError.ReadToEndAsync();
+        var waitTask = p.WaitForExitAsync();
+        if (await Task.WhenAny(waitTask, Task.Delay(timeoutMs)) != waitTask)
+        {
+            try { p.Kill(true); } catch { }
+            return (-1, $"超时（>{timeoutMs / 1000}s）");
+        }
+        await waitTask;
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
+        var text = (stdout + "\n" + stderr).Trim();
+        return (p.ExitCode, text);
     }
 
     private static async Task WriteAsync(HttpListenerContext ctx, string s)

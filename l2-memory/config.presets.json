@@ -1,0 +1,72 @@
+{
+  "schema": "aios-config-presets-v1",
+  "presets": [
+    {
+      "id": "siliconflow",
+      "name": "硅基流动 SiliconFlow（推荐联通，判断点直连）",
+      "provider": "siliconflow-cn",
+      "kind": "openai",
+      "base": "https://api.siliconflow.cn/v1",
+      "env": "SILICONFLOW_API_KEY",
+      "models": ["deepseek-ai/DeepSeek-V4-Flash", "deepseek-ai/DeepSeek-V4-Pro", "zai-org/GLM-5.2"],
+      "default": "siliconflow-cn/deepseek-ai/DeepSeek-V4-Flash",
+      "judge_default": "siliconflow-cn/deepseek-ai/DeepSeek-V4-Flash"
+    },
+    {
+      "id": "volcengine",
+      "name": "火山引擎 方舟（Volcano Ark）",
+      "provider": "volcengine-agent-plan",
+      "kind": "openai",
+      "base": "https://ark.cn-beijing.volces.com/api/plan/v3",
+      "env": "ARK_API_KEY",
+      "models": ["deepseek-v4-flash", "deepseek-v4-pro", "doubao-seed-2.1-turbo", "kimi-k2.7-code"],
+      "default": "volcengine-agent-plan/deepseek-v4-flash",
+      "judge_default": "volcengine-agent-plan/deepseek-v4-flash"
+    },
+    {
+      "id": "opencode-go",
+      "name": "OpenCode Go（zen gateway，OpenAI 兼容）",
+      "provider": "opencode-go",
+      "kind": "openai",
+      "base": "https://opencode.ai/zen/go/v1",
+      "env": "OPENCODE_GO_API_KEY",
+      "headers": { "User-Agent": "modelz/0.1", "x-opencode-session": "local-modelz" },
+      "models": ["deepseek-v4.1-flash", "deepseek-v4-flash", "deepseek-v4-pro", "glm-5.3", "kimi-k3"],
+      "default": "opencode-go/deepseek-v4.1-flash",
+      "judge_default": "opencode-go/deepseek-v4.1-flash"
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek 官方 API",
+      "provider": "deepseek",
+      "kind": "openai",
+      "base": "https://api.deepseek.com/v1",
+      "env": "DEEPSEEK_API_KEY",
+      "models": ["deepseek-chat", "deepseek-reasoner"],
+      "default": "deepseek/deepseek-chat",
+      "judge_default": "deepseek/deepseek-chat"
+    },
+    {
+      "id": "moonshot",
+      "name": "月之暗面 Kimi（Moonshot）",
+      "provider": "moonshot",
+      "kind": "openai",
+      "base": "https://api.moonshot.cn/v1",
+      "env": "MOONSHOT_API_KEY",
+      "models": ["kimi-k2", "moonshot-v1-8k"],
+      "default": "moonshot/kimi-k2",
+      "judge_default": "moonshot/kimi-k2"
+    },
+    {
+      "id": "zhipu",
+      "name": "智谱 GLM（bigmodel）",
+      "provider": "zhipu",
+      "kind": "openai",
+      "base": "https://open.bigmodel.cn/api/paas/v4",
+      "env": "ZHIPUAI_API_KEY",
+      "models": ["glm-4.7-flash", "glm-4-plus"],
+      "default": "zhipu/glm-4.7-flash",
+      "judge_default": "zhipu/glm-4.7-flash"
+    }
+  ]
+}

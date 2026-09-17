@@ -2,3 +2,5 @@ numpy>=1.26
 PyYAML>=6.0
 langgraph>=1.2
 langchain-openai>=1.6
+requests>=2.31
+pydantic>=2.7

@@ -807,7 +807,7 @@
 .personal-quick-prompts { display: flex; gap: 8px; margin-bottom: 9px; flex-wrap: wrap; }
 .personal-quick-prompts button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 5px 12px; border: 1px solid var(--pw-line-strong); border-radius: 99px; background: #fff; color: var(--pw-muted); font-size: 12.5px; cursor: pointer; transition: all .14s ease; }
 .personal-quick-prompts button:hover { border-color: var(--pw-blue); color: var(--pw-blue-ink); }
-.personal-quick-prompts button.is-draft { border-color: #dbe4f8; color: var(--pw-body); }
+.personal-quick-prompts button.is-draft { border-color: #dbe4f8; color: var(--pw-text); }
 .personal-quick-prompts button.is-draft:hover { background: #fafaf8; border-color: #9cbdf8; color: var(--pw-blue-ink); }
 .personal-quick-prompts button.is-immediate { background: var(--pw-blue-soft); border-color: #9cbdf8; color: var(--pw-blue-ink); font-weight: 600; }
 .personal-quick-prompts button.is-immediate:hover { background: #dce7fe; border-color: var(--pw-blue); box-shadow: 0 1px 4px rgb(47 102 233 / 18%); }
@@ -1623,7 +1623,7 @@
   color: var(--pw-text);
 }
 .personal-workspace-shell[data-pw-theme="aios"] .personal-goal-tabs button[aria-current="page"],
-.personal-workspace-shell[data-pw-theme="aios"] .personal-goal-tabs button[aria-current="page"]::after { color: #fff; background: #fff; }
+.personal-workspace-shell[data-pw-theme="aios"] .personal-goal-tabs button[aria-current="page"]::after { color: #fff; background: rgb(70 110 210 / 24%); }
 .personal-workspace-shell[data-pw-theme="aios"] .personal-sidebar-count { background: rgb(30 42 66 / 60%); color: #cfd8e8; }
 .personal-workspace-shell[data-pw-theme="aios"] .personal-goal-state-dot,
 .personal-workspace-shell[data-pw-theme="aios"] .personal-goal-row:nth-child(n) .personal-goal-state-dot { background: rgb(24 34 52 / 60%); border-color: var(--pw-line); }
@@ -1649,6 +1649,15 @@
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
+
+/* aios 主题：修正残留的浅色底控件（原为亮色主题设计的白底/浅底，落在此主题会浅字不可读） */
+.personal-workspace-shell[data-pw-theme="aios"] .personal-quick-prompts button { background: rgb(10 16 26 / 55%); border-color: var(--pw-line-strong); color: var(--pw-text); }
+.personal-workspace-shell[data-pw-theme="aios"] .personal-quick-prompts button.is-draft { border-color: var(--pw-line); color: var(--pw-muted); }
+.personal-workspace-shell[data-pw-theme="aios"] .personal-quick-prompts button.is-immediate { background: var(--pw-blue-soft); border-color: var(--pw-line-strong); color: var(--pw-blue-ink); }
+.personal-workspace-shell[data-pw-theme="aios"] .personal-quick-prompts button:hover { background: rgb(50 70 110 / 26%); color: var(--pw-blue-ink); border-color: var(--pw-blue); }
+.personal-workspace-shell[data-pw-theme="aios"] .personal-home-goal-card > footer span { background: rgb(20 30 48 / 55%); color: var(--pw-text); }
+.personal-workspace-shell[data-pw-theme="aios"] .personal-home-goal-card > footer small { color: var(--pw-muted); }
+.personal-workspace-shell[data-pw-theme="aios"] .personal-stopped-goals > summary small { background: rgb(20 30 48 / 55%); color: var(--pw-text); }
 
 /* aios 主题：隐藏内部滚动条（滚动功能保留，滚动条默认不可见，不占位） */
 .personal-workspace-shell[data-pw-theme="aios"] * {

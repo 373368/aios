@@ -2,6 +2,18 @@
 
 版本号与本地便携包 `aios-<版本>-win64.zip` 对应；未发布 GitHub Release。
 
+## 0.4.3 — 2026-09-17
+
+- **初始化向导**（设置 → 初始化）：四步引导（Python 解释器 → 依赖安装 → 模型配置 → loopx 安装与建档）；loopx 从"可选"升为必需引导项（registry 未建档 / 未安装均引导完成初始化，不再只是降级）；附「重启壳」一键操作
+- **快速配置**：内置常见模型源预设（`config.presets.json`：硅基流动 / 火山方舟 / OpenCode Go / DeepSeek / Moonshot / 智谱）→ 选源 + 粘贴 key 一键应用：自动写 provider 与默认模型，并把 API key 写入用户级环境变量（无需手写 JSON）
+- **壳路径契约对齐**（修真实 bug）：`Paths.cs` 现在与 `paths.py` 同契约（环境变量 > `config.json["paths"]` > 默认）——此前写在 config.json 的 vault 路径壳看不见，导致「星空知识图谱 0 节点 / 一片黑」
+- **星图确认**：`build_graph_data.py` 对任意 markdown 目录通用（note / tag / wikilink 全支持），0 节点根因即上条路径错位
+- **工作台浅字修复**（aios 主题）：修正 `--pw-body` 未定义变量导致的按钮白底浅字、当前 tab 白底白字、快捷提示/目标卡片/已停止计数 chip 的浅底残留
+- **loopx 未初始化**归入降级引导（`degraded_reason=loopx-uninitialized`），健康面板不再报契约错误
+- 健康面板契约项附首条错误/警告明细；体检新增「壳视角（python / vault）」一致性项 + Python 项显示 `sys.executable`
+- `requirements.txt` 显式补 `requests` / `pydantic`（防 `--no-deps` 踩传递依赖）
+- 壳新增路由：`config-presets · config-apply · setup-status · setup-install-deps · setup-install-loopx · setup-init-loopx · setup-set-python · restart-shell`
+
 ## 0.4.2 — 2026-09-17
 
 - 修复无 loopx 机器上仍报「无法加载实时状态」：降级载荷按 dashboard schema 补全字段（缺失字段会被前端 Zod 校验拒绝）；前端识别 `degraded` 标记并显示顶部提示条，健康关注点文案改为人话

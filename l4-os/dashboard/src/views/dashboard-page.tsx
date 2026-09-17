@@ -1242,15 +1242,17 @@ function buildPersonalHomeModel(
   });
 
   const systemHealthIssues: string[] = [];
-  if (!payload.ok) {
-    systemHealthIssues.push(payload.degraded ? "loopx 未接入（可选组件）：实时状态不可用" : "状态载荷未标记为正常");
+  if (!payload.ok && !payload.degraded) {
+    // degraded 场景（loopx 未接入/未初始化）由顶部引导横幅承载，不重复计入健康关注点
+    systemHealthIssues.push("状态载荷未标记为正常");
   }
   if (payload.contract && !payload.contract.ok) {
     const summary = payload.contract.summary;
     const detail = summary
       ? `${summary.errors} 项错误 / ${summary.warnings} 项警告`
       : (payload.contract.errors?.[0] || "请检查控制面契约");
-    systemHealthIssues.push(`契约检查未通过: ${detail}`);
+    const first = payload.contract.errors?.[0] || payload.contract.warnings?.[0];
+    systemHealthIssues.push(`契约检查未通过: ${detail}${first ? ` · ${first}` : ""}`);
   }
   if (payload.global_registry) {
     if (!payload.global_registry.ok) {
@@ -2481,7 +2483,11 @@ function PersonalGoalHome({
     <div className={theme === "dark" ? "dark" : ""} data-testid="personal-goal-home">
       {payload.degraded ? (
         <div className="aios-degraded-banner" role="status">
-          loopx 未接入（可选组件）：实时状态与 goal 投影不可用；安装并启动 loopx 后自动恢复。
+          {payload.degraded_reason === "loopx-uninitialized"
+            ? "loopx 未初始化（未创建 registry）：打开 设置 → 初始化 完成建档后自动恢复。"
+            : payload.degraded_reason === "loopx-missing"
+              ? "loopx 未接入：打开 设置 → 初始化 完成安装与建档（完成后自动恢复）。"
+              : "loopx 未接入：实时状态与 goal 投影不可用；完成初始化后自动恢复。"}
         </div>
       ) : null}
       <PersonalWorkspacePage

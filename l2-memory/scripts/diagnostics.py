@@ -17,6 +17,7 @@ import argparse
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -62,7 +63,7 @@ def _last_line(text, n=200):
 def check_python():
     v = sys.version_info
     ok = (v.major, v.minor) >= (3, 10)
-    return _item("python", "环境", "Python 版本", "pass" if ok else "fail", 0, f"{v.major}.{v.minor}.{v.micro}")
+    return _item("python", "环境", "Python 版本", "pass" if ok else "fail", 0, f"{v.major}.{v.minor}.{v.micro} · {sys.executable}")
 
 
 def check_deps():
@@ -70,6 +71,28 @@ def check_deps():
     missing = [m for m in need if importlib.util.find_spec(m) is None]
     return _item("deps", "环境", "依赖导入", "pass" if not missing else "fail", 0,
                  "全部就绪" if not missing else "缺少: " + ", ".join(missing) + "（pip install -r requirements.txt）")
+
+
+def _norm(exe_or_path):
+    """PATH 名（如 python）先解析成完整路径再规范化，避免误报不一致。"""
+    return os.path.normcase(os.path.abspath(shutil.which(exe_or_path) or exe_or_path))
+
+
+def check_shell_view(shell_python, shell_vault):
+    """壳视角：壳进程实际使用的 python / vault 与 Python 侧解析值是否一致（不一致=配置没生效）。"""
+    if not shell_python and not shell_vault:
+        return None
+    parts, ok = [], True
+    if shell_python:
+        same = _norm(shell_python) == _norm(PY)
+        parts.append(f"python {'一致' if same else '不一致'}（壳: {shell_python}）")
+        ok = ok and same
+    if shell_vault:
+        same = os.path.normcase(os.path.abspath(shell_vault)) == os.path.normcase(os.path.abspath(VAULT))
+        parts.append(f"vault {'一致' if same else '不一致'}（壳: {shell_vault}）")
+        ok = ok and same
+    return _item("shell_view", "环境", "壳视角（python / vault）", "pass" if ok else "warn", 0,
+                 "；".join(parts) if ok else "；".join(parts) + "——用环境变量 AIOS_PYTHON / AIOS_VAULT 对齐并重启壳")
 
 
 def check_config():
@@ -197,6 +220,8 @@ def check_model_ping():
 def main():
     ap = argparse.ArgumentParser(description="aios 体检")
     ap.add_argument("--mode", choices=["quick", "ping"], default="quick")
+    ap.add_argument("--shell-python", default="", help="壳进程实际使用的 python（一致性对照用）")
+    ap.add_argument("--shell-vault", default="", help="壳进程实际使用的 vault（一致性对照用）")
     args = ap.parse_args()
 
     t0 = time.time()
@@ -212,6 +237,9 @@ def main():
         check_demo(),
         check_opencode_server(),
     ]
+    shell_view = check_shell_view(args.shell_python, args.shell_vault)
+    if shell_view:
+        items.append(shell_view)
     if args.mode == "ping":
         items.append(check_model_ping())
 
