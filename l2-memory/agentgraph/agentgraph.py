@@ -5,7 +5,8 @@ YAML 声明图（节点/边/状态/模型）→ 编译为 LangGraph StateGraph �
   - 声明式：拓扑、prompt、模型引用全部在 YAML
   - 并行：同一起点多条出边 = fan-out（同 superstep 内并行执行）；
           fan-in 节点自动等待全部上游；list + reducer=add 合并并行写入
-  - 节点类型：llm（默认，prompt/{state字段}渲染）/ primitive（调 scripts|tasks 脚本原语，
+  - 节点类型：llm（默认，prompt/{state字段}渲染；可选 tools: [工具名] 走模型自主调用回路，
+              工具池见 tools.py）/ primitive（调 scripts|tasks 脚本原语，
               argv 支持 {state字段} 渲染，json: true 解析 stdout）
   - 声明身份：llm 节点可绑定 declaration: <md>（正文=人设/运行规范/专用提示词 → system
               prompt；frontmatter 可选 name/description/model）——同底座、不同声明 = 多身份
@@ -17,8 +18,8 @@ YAML 声明图（节点/边/状态/模型）→ 编译为 LangGraph StateGraph �
   python agentgraph.py graph <spec.yaml>                 # 打印 mermaid 拓扑
   python agentgraph.py run   <spec.yaml> [--input k=v] [--json]
 
-ponytail: 无 checkpointer / 工具节点 / HITL；需要断点续跑或工具调用时
-再接（langgraph.checkpoint.*、prebuilt ToolNode）。
+ponytail: 工具回路为手写有界循环（≤6 轮，调用记入 trace）；无 checkpointer / HITL，
+需要断点续跑时再接（langgraph.checkpoint.*）。
 """
 import argparse
 import json
@@ -37,6 +38,7 @@ AGENTGRAPH_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(AGENTGRAPH_DIR, "..", "scripts"))
 import modelz  # noqa: E402
 from common import run_capture  # noqa: E402
+from tools import TOOLS  # noqa: E402
 
 TYPES = {"str": str, "int": int, "float": float, "bool": bool, "list": list, "dict": dict}
 REDUCERS = {"add": operator.add}
@@ -112,8 +114,29 @@ def load_spec(path):
                     os.path.splitext(os.path.basename(dpath))[0]
             if not n.get("prompt"):
                 _fail(f"节点 {n['id']}: llm 节点缺 prompt")
+            tnames = n.get("tools")
+            if tnames:
+                if not (isinstance(tnames, list) and all(isinstance(t, str) for t in tnames)):
+                    _fail(f"节点 {n['id']}: tools 必须是字符串列表")
+                unknown = sorted(set(tnames) - set(TOOLS))
+                if unknown:
+                    _fail(f"节点 {n['id']}: 未知工具 {unknown}（可用 {sorted(TOOLS)}）")
+                n["tool_names"] = tnames
+            dtools = (n.get("decl_meta") or {}).get("tools")
+            if dtools is not None:
+                if not (isinstance(dtools, list) and all(isinstance(t, str) for t in dtools)):
+                    _fail(f"节点 {n['id']}: 声明 tools 必须是字符串列表")
+                unknown_d = sorted(set(dtools) - set(TOOLS))
+                if unknown_d:
+                    _fail(f"节点 {n['id']}: 声明含未知工具 {unknown_d}（可用 {sorted(TOOLS)}）")
+                outside = sorted(set(n.get("tool_names") or []) - set(dtools))
+                if outside:
+                    _fail(f"节点 {n['id']}: 节点工具超出声明白名单 {outside}"
+                          f"（声明 {n['decl_name']} 允许 {sorted(dtools)}）")
             refs.append(n["prompt"])
         else:
+            if n.get("tools"):
+                _fail(f"节点 {n['id']}: tools 仅 llm 节点支持")
             if not n.get("primitive"):
                 _fail(f"节点 {n['id']}: primitive 节点缺 primitive")
             if not isinstance(n.get("args", []), list):
@@ -163,7 +186,8 @@ def build_llm(ref):
         _fail(f"模型 {ref} 的来源 kind={info['kind']}；LangGraph 侧仅支持 openai 兼容来源"
               f"（例：volcengine-agent-plan/deepseek-v4-flash）")
     llm = ChatOpenAI(model=info["model"], base_url=info["base"], api_key=info["api_key"],
-                     timeout=180, max_retries=2)
+                     timeout=180, max_retries=2,
+                     default_headers=info.get("headers") or None)
     _LLM_CACHE[ref] = llm
     return llm
 
@@ -235,32 +259,87 @@ def make_primitive_node(spec, node):
     return fn
 
 
+def _msg_text(content):
+    if isinstance(content, str):
+        return content
+    return "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
+
+
+def _sys_text(node, cur):
+    parts = []
+    if node.get("decl_body"):
+        parts.append(node["decl_body"])
+    if node.get("system"):
+        parts.append(_render(node["system"], cur))
+    return "\n\n".join(parts)
+
+
+MAX_TOOL_ROUNDS = 6
+
+
+def _tool_loop(spec, node, cur, ref):
+    """llm 节点 + tools：模型自主调用工具（有界循环），每次调用记入 trace。"""
+    from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+    llm = build_llm(ref).bind_tools([TOOLS[n] for n in node["tool_names"]])
+    msgs = []
+    sys_text = _sys_text(node, cur)
+    if sys_text:
+        msgs.append(SystemMessage(content=sys_text))
+    msgs.append(HumanMessage(content=_render(node["prompt"], cur)))
+    tool_trace = []
+    resp = None
+    for round_no in range(MAX_TOOL_ROUNDS + 1):
+        resp = llm.invoke(msgs)
+        calls = getattr(resp, "tool_calls", None) or []
+        if not calls:
+            break
+        if round_no >= MAX_TOOL_ROUNDS:
+            raise RuntimeError(f"[agentgraph] 节点 {node['id']}: 工具循环超上限 "
+                               f"{MAX_TOOL_ROUNDS} 轮")
+        msgs.append(resp)
+        for tc in calls:
+            name = tc.get("name")
+            tt0 = time.time()
+            tool_obj = TOOLS.get(name)
+            if tool_obj is None:
+                content = f"ERROR: 未知工具 {name}"
+            else:
+                try:
+                    content = str(tool_obj.invoke(tc.get("args") or {}))
+                except Exception as e:
+                    content = f"ERROR: 工具 {name} 异常: {e}"
+            tool_trace.append({"node": f"{node['id']}.{name}", "t0": round(tt0, 3),
+                               "t1": round(time.time(), 3)})
+            msgs.append(ToolMessage(content=content, tool_call_id=tc.get("id") or name))
+    return resp, tool_trace
+
+
 def make_llm_node(spec, node):
     out_field = node["output"]
     out_is_list = spec["state"][out_field].get("type") == "list"
 
     def fn(cur):
         t0 = time.time()
-        msgs = []
-        sys_parts = []
-        if node.get("decl_body"):
-            sys_parts.append(node["decl_body"])
-        if node.get("system"):
-            sys_parts.append(_render(node["system"], cur))
-        if sys_parts:
-            msgs.append(("system", "\n\n".join(sys_parts)))
-        msgs.append(("human", _render(node["prompt"], cur)))
         ref = (_decl_model(node) or node.get("model") or spec.get("model")
                or modelz.load_models().get("default"))
-        resp = build_llm(ref).invoke(msgs)
-        content = resp.content
-        text = content if isinstance(content, str) else "".join(
-            p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
+        tool_trace = []
+        if node.get("tool_names"):
+            resp, tool_trace = _tool_loop(spec, node, cur, ref)
+        else:
+            msgs = []
+            sys_text = _sys_text(node, cur)
+            if sys_text:
+                msgs.append(("system", sys_text))
+            msgs.append(("human", _render(node["prompt"], cur)))
+            resp = build_llm(ref).invoke(msgs)
+        text = _msg_text(resp.content)
         value = _extract_json(text) if node.get("json") else text.strip()
         if out_is_list and not isinstance(value, list):
             value = [value]
         result = {out_field: value}
         _add_trace(spec, node, t0, result)
+        if tool_trace and "trace" in result:
+            result["trace"] += tool_trace
         return result
     return fn
 
@@ -360,6 +439,7 @@ def cmd_run(spec_path, inputs, as_json):
 def main():
     if sys.platform == "win32":
         sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")  # 错误文本跨层透传（壳/面板展示）不 GBK 化
     p = argparse.ArgumentParser(prog="agentgraph")
     sub = p.add_subparsers(dest="cmd", required=True)
     for cmd in ("check", "graph", "run"):

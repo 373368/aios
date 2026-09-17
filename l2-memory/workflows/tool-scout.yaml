@@ -1,0 +1,42 @@
+kind: Workflow
+metadata:
+  name: tool-scout
+  description: 工具侦察——源搜索三源（本地盘点 / GitHub / 指定网址）→ 候选清单 + 注册条目草案落盘（drafts/，采纳走 adopt_tool_draft）
+  version: 0.1
+trigger:
+  kind: OnCommand
+  command: tool-scout
+  required: [brief]
+  arguments:
+    - {name: brief, type: longtext, required: true, hint: 工具需求描述（越具体越好）}
+    - {name: url, type: text, hint: 参考网址（可选，指定页面供抓取参考）}
+    - {name: dry_run, type: bool, hint: 预览：不落盘草案}
+variables:
+  brief: =System.Args.brief
+actions:
+  - kind: InvokePrimitive
+    via: primitives
+    primitive: tool_inventory
+    output: =Local.Inv
+  - kind: SetVariable
+    var: url
+    value: "（未指定）"
+  - kind: SetVariable
+    var: url
+    when: =System.Args.url
+    value: =System.Args.url
+  - kind: InvokeAgent
+    spec: ../agentgraph/specs/tool-scout.yaml
+    input:
+      brief: =Local.brief
+      inventory: =Local.Inv
+      url: =Local.url
+    output: =Local.Result
+    expects: [candidates, drafts]
+  - kind: InvokePrimitive
+    via: primitives
+    primitive: save_tool_drafts
+    when: =System.Args.dry_run != "true"
+    args:
+      drafts: =Local.Result.drafts
+    output: =Local.Saved

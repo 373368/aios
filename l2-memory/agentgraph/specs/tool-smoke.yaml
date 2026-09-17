@@ -1,0 +1,20 @@
+kind: AgentGraph
+metadata:
+  name: tool-smoke
+  description: 工具回路冒烟——llm 节点自主调用 vault_search 检索知识库并汇报命中
+model: opencode-go/deepseek-v4.1-flash
+trace: true
+outputs: [answer]
+state:
+  topic: {type: str}
+  answer: {type: str}
+nodes:
+  - id: search
+    prompt: |
+      用 vault_search 工具检索知识库中与「{topic}」最相关的页面（k=5），
+      然后列出其中 3 个最相关文件的路径，每行一个，不要多余解释。
+    tools: [vault_search]
+    output: answer
+edges:
+  - [START, search]
+  - [search, END]

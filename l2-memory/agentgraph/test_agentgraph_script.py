@@ -133,8 +133,58 @@ def main():
     assert ag.used_models(spec6) == {"fake/ref"}, f"models={ag.used_models(spec6)}"
     assert spec6["nodes"][0]["decl_name"] == "t-agent"
 
+    # 5a: 工具白名单——未知工具 → 加载期报错
+    d5 = {"kind": "AgentGraph", "state": {"x": {"type": "str"}},
+          "nodes": [{"id": "a", "prompt": "hi", "tools": ["no-such-tool"], "output": "x"}],
+          "edges": [["START", "a"], ["a", "END"]]}
+    p7 = os.path.join(tmp, "bad7.yaml")
+    _write(p7, d5)
+    try:
+        ag.load_spec(p7)
+        raise AssertionError("未知工具未报错")
+    except SystemExit as e:
+        assert "未知工具" in str(e), f"错误信息不符: {e}"
+
+    # 5b: 工具白名单——在册工具 → 通过，工具池三件在位
+    d6 = {"kind": "AgentGraph", "state": {"x": {"type": "str"}},
+          "nodes": [{"id": "a", "prompt": "hi", "tools": ["vault_search"], "output": "x"}],
+          "edges": [["START", "a"], ["a", "END"]]}
+    p8 = os.path.join(tmp, "spec8.yaml")
+    _write(p8, d6)
+    spec8 = ag.load_spec(p8)
+    assert spec8["nodes"][0]["tool_names"] == ["vault_search"], spec8["nodes"][0]
+    for t in ("vault_search", "arxiv_search", "web_fetch"):
+        assert t in ag.TOOLS, f"工具池缺 {t}"
+    assert ag.MAX_TOOL_ROUNDS >= 1
+
+    # 5c/5d: 声明白名单——节点工具 ⊆ 声明 tools；超出则报错
+    d7 = os.path.join(tmp, "decl-tools.md")
+    with open(d7, "w", encoding="utf-8") as f:
+        f.write("---\nname: tool-agent\ntools: [vault_search]\n---\n你是工具型身份。\n")
+    d8 = {"kind": "AgentGraph", "state": {"x": {"type": "str"}},
+          "nodes": [{"id": "a", "declaration": d7, "prompt": "hi",
+                     "tools": ["vault_search"], "output": "x"}],
+          "edges": [["START", "a"], ["a", "END"]]}
+    p9 = os.path.join(tmp, "spec9.yaml")
+    _write(p9, d8)
+    spec9 = ag.load_spec(p9)
+    assert spec9["nodes"][0]["tool_names"] == ["vault_search"], spec9["nodes"][0]
+
+    d9 = {"kind": "AgentGraph", "state": {"x": {"type": "str"}},
+          "nodes": [{"id": "a", "declaration": d7, "prompt": "hi",
+                     "tools": ["web_fetch"], "output": "x"}],
+          "edges": [["START", "a"], ["a", "END"]]}
+    p10 = os.path.join(tmp, "bad10.yaml")
+    _write(p10, d9)
+    try:
+        ag.load_spec(p10)
+        raise AssertionError("超出声明白名单未报错")
+    except SystemExit as e:
+        assert "超出声明白名单" in str(e), f"错误信息不符: {e}"
+
     print("OK: 原语节点离线测试通过 | 链路 ✓ / json ✓ / 失效可见 ✓（加载期+运行期）| "
-          "outputs 契约 ✓（未知字段/未接线）| 声明身份 ✓（解析/缺失/空正文/模型优先）")
+          "outputs 契约 ✓（未知字段/未接线）| 声明身份 ✓（解析/缺失/空正文/模型优先）| "
+          "工具白名单 ✓（未知拦截/在册通过/声明越权拦截）")
 
 
 if __name__ == "__main__":

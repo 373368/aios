@@ -2,6 +2,8 @@ kind: AgentGraph
 metadata:
   name: parallel-analysts
   description: 三名声明身份（技术/风险/应用）+ 主编汇总；同底座、不同声明，fan-out/fan-in 协作示例
+inputs:
+  - {name: topic, type: longtext, required: true, hint: 分析主题（技术/风险/应用三角分析 + 主编汇总）}
 model: volcengine-agent-plan/deepseek-v4-flash
 trace: true
 outputs: [findings, report]

@@ -1,0 +1,56 @@
+kind: AgentGraph
+metadata:
+  name: tool-scout
+  description: 工具侦察 agent（源搜索三源）——需求 → 本地盘点/GitHub/指定网址 → 候选清单 + 注册条目草案
+inputs:
+  - {name: brief, type: longtext, required: true, hint: 工具需求描述}
+  - {name: url, type: text, hint: 参考网址（可选）}
+  - {name: inventory, type: text, hint: 本地盘点文本（缺省为空；经工作流运行时由前置原语注入）}
+model: opencode-go/deepseek-v4.1-flash
+trace: true
+outputs: [candidates, drafts]
+state:
+  brief: {type: str}
+  inventory: {type: str}
+  url: {type: str}
+  candidates: {type: str}
+  drafts: {type: list}
+nodes:
+  - id: scout
+    declaration: ../declarations/tool-scout.md
+    tools: [github_search, web_fetch, vault_search]
+    prompt: |
+      需求：「{brief}」
+
+      本地已有工具与脚本盘点（避免重造）：
+      {inventory}
+
+      指定网址（未指定=无）：{url}
+
+      步骤：
+      1) 先看本地盘点——已有可复用的直接列为「复用」（local）
+      2) 用 github_search 找 2-3 个候选开源实现
+      3) 若给了网址，用 web_fetch 看该服务能否直接包装成 http 工具
+      输出 5-10 条候选清单（文本），每条一行：名称 | 来源(local/github/url) | 一句话能力 | 建议 kind(http/script/plugin) | 理由
+    output: candidates
+  - id: draft
+    declaration: ../declarations/tool-scout.md
+    prompt: |
+      候选清单：
+      {candidates}
+
+      为其中最有价值的（最多 2 个）产出可直接注册的条目草案，仅输出 JSON 数组（不要多余文字）。字段契约（严格照此结构：config 单层、params 是参数名数组）：
+      {"name": "wttr_weather", "kind": "http", "description": "何时用（一句话）", "config": {"url": "https://wttr.in/<location>?format=j1", "method": "GET", "params": ["location"], "rows": {"from": "current_condition", "fields": ["temp_C", "humidity"]}, "max_chars": 1500}, "smoke": {"args": {"location": "Beijing"}}}
+
+      规则：
+      - url 中每个参数写成「左花括号+参数名+右花括号」的占位（示例里用尖括号只是为了演示位置），且与 params 一一对应
+      - rows.from = 响应 JSON 里数组的路径；rows.fields = 要摘的字段名数组（无 rows 则原样/截断返回）
+      - kind=script 时 config 为 {"script": "相对 l2-memory 的路径", "args": ["--query", "参数占位"], "params": ["q"]}
+      - kind=plugin 时 config 为 {"path": "plugins/xxx.py"}（仅当确有现成插件文件时）
+      - 信息不足宁缺勿编；无法产出有效草案的候选直接跳过
+    json: true
+    output: drafts
+edges:
+  - [START, scout]
+  - [scout, draft]
+  - [draft, END]

@@ -1,0 +1,23 @@
+kind: Workflow
+metadata:
+  name: agent-forge
+  description: 身份工厂——按清单批量声明 agent 身份（declarations/*.md）；dry_run=true 预览跳过
+  version: 0.1
+  ui_hidden: true   # 机读入口（批量清单），不上面板；CLI 触发不受影响
+trigger:
+  kind: OnCommand
+  command: agent-forge
+  required: [plan]
+  arguments:
+    - {name: plan, type: longtext, required: true, hint: "身份清单 JSON（agents 数组）或清单文件路径"}
+    - {name: dry_run, type: bool, hint: 预览：不写入}
+variables:
+  plan: =System.Args.plan
+actions:
+  - kind: InvokePrimitive
+    via: primitives
+    primitive: declare_agents
+    when: =System.Args.dry_run != "true"
+    args:
+      plan: =Local.plan
+    output: =Local.Report

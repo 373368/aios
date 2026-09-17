@@ -1,0 +1,88 @@
+tools:
+- name: github_search
+  kind: http
+  description: 搜索 GitHub 仓库（按相关度）。输入关键词，返回仓库全名/描述/星数/链接。
+  config:
+    url: https://api.github.com/search/repositories?q={q}&sort=stars&per_page=5
+    method: GET
+    params:
+    - q
+    rows:
+      from: items
+      fields:
+      - full_name
+      - stargazers_count
+      - html_url
+      - description
+    max_chars: 3000
+  smoke:
+    args:
+      q: declarative workflow
+- name: wttr_weather
+  kind: http
+  description: 查询指定城市当前天气与简短预报（免密钥）。输入城市名或拼音（如 Beijing），返回结构化 JSON。
+  config:
+    url: https://wttr.in/{location}?format=j1
+    method: GET
+    params:
+    - location
+    rows:
+      from: current_condition
+      fields:
+      - temp_C
+      - weatherDesc
+      - humidity
+      - windspeedKmph
+    max_chars: 1500
+  smoke:
+    args:
+      location: Beijing
+- name: local_time
+  kind: plugin
+  description: 返回本机当前日期时间（本地时区，YYYY-MM-DD HH:MM:SS；无需参数）。
+  config:
+    path: plugins/local_time.py
+  smoke:
+    args: {}
+- name: hn_search
+  kind: http
+  description: 按关键词检索 Hacker News 帖子（相关性排序），拿到标题/原文链接/HN 讨论页/热度；想了解某技术话题在 HN 上的讨论时用。
+  config:
+    url: https://hn.algolia.com/api/v1/search?query={query}&tags=story&hitsPerPage=20
+    method: GET
+    params:
+    - query
+    rows:
+      from: hits
+      fields:
+      - title
+      - url
+      - objectID
+      - points
+      - num_comments
+      - created_at
+    max_chars: 1500
+  smoke:
+    args:
+      query: python
+- name: hn_search_by_date
+  kind: http
+  description: 按时间倒序检索 Hacker News 帖子，用于追踪某关键词的最新讨论（而非历史高热度帖）。
+  config:
+    url: https://hn.algolia.com/api/v1/search_by_date?query={query}&tags=story&hitsPerPage=20
+    method: GET
+    params:
+    - query
+    rows:
+      from: hits
+      fields:
+      - title
+      - url
+      - objectID
+      - points
+      - num_comments
+      - created_at
+    max_chars: 1500
+  smoke:
+    args:
+      query: python

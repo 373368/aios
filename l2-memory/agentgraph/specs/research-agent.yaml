@@ -1,0 +1,44 @@
+kind: AgentGraph
+metadata:
+  name: research-agent
+  description: 调研 agent（L3 嵌套 L1）——主题 → 检索取证（工具回路）→ 结构化笔记 → 写库（原语）
+inputs:
+  - {name: topic, type: text, required: true, hint: 调研主题}
+model: opencode-go/deepseek-v4.1-flash
+trace: true
+outputs: [evidence, note, write_result]
+state:
+  topic: {type: str}
+  evidence: {type: str}
+  note: {type: dict}
+  write_result: {type: list}
+nodes:
+  - id: research
+    declaration: ../declarations/research-analyst.md
+    tools: [vault_search, arxiv_search, web_fetch]
+    prompt: |
+      调研主题：「{topic}」
+      先检索取证（本地知识库优先，必要时网络/论文），至少调用 2 次工具；
+      然后给出 5-8 条要点，每条标注来源（路径或 URL）。
+    output: evidence
+  - id: compose
+    declaration: ../declarations/research-analyst.md
+    prompt: |
+      以下是调研要点：
+      {evidence}
+
+      请将其整理为一条可长期保存的知识笔记，仅输出 JSON（不要多余文字），字段：
+      {"title": "笔记标题（名词短语）", "skeleton": "骨架分类（AI与机器学习|编程开发|数学|计算机基础|物理|医疗|学习|生活|娱乐|学术前沿 之一）", "subdir": "子目录（可空字符串）", "body": "markdown 正文（从 ## 开始，不要重复一级标题；结论在前，含来源）"}
+    json: true
+    output: note
+  - id: write
+    kind: primitive
+    primitive: primitives
+    args: ["write_kb_page", "{note}"]
+    json: true
+    output: write_result
+edges:
+  - [START, research]
+  - [research, compose]
+  - [compose, write]
+  - [write, END]

@@ -1,0 +1,21 @@
+kind: Workflow
+metadata:
+  name: research
+  description: 主题调研——InvokeAgent 调 research-agent 图（检索取证→成稿→写库），产出笔记入 vault
+  version: 0.1
+trigger:
+  kind: OnCommand
+  command: research
+  required: [topic]
+  arguments:
+    - {name: topic, type: text, required: true, hint: 调研主题（必填）}
+variables:
+  topic: =System.Args.topic
+actions:
+  - kind: InvokeAgent
+    id: research
+    spec: ../agentgraph/specs/research-agent.yaml
+    input:
+      topic: =Local.topic
+    output: =Local.Result
+    expects: [note, write_result]

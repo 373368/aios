@@ -11,6 +11,12 @@
   mark_digested      — memory 文件重命名 .digested.md（不删原文）
   append_behavior_log— 追加 03-日志/行为记录/YYYY-MM-DD.md
   append_digest_log  — 追加 03-日志/digest-YYYYMMDD.md（含 COMPLETED 标记）
+  declare_agent      — 写身份声明（agentgraph/declarations/<name>.md，幂等）
+  declare_agents     — 批量声明（清单 JSON 文件/文本/对象；汇总报告）
+  register_tool      — 注册扩展工具（tools_registry.yaml；校验+smoke+幂等）
+  save_tool_drafts   — 工具草案落盘（agentgraph/drafts/<name>.tool.json；同名跳过）
+  adopt_tool_draft   — 采纳草案（register_tool + 改名 *.adopted.json）
+  tool_inventory     — 本地工具源盘点（工具工厂·源搜索本地支）
 
 全部幂等（重复执行不重复产生副作用），原子写（临时→替换防半截）。
 用法（库）：
@@ -201,7 +207,12 @@ def write_kb_page(title, skeleton, subdir, frontmatter=None, body="",
         return path, "skipped"
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fm = "---\n" + "".join(f"{k}: {v}\n" for k, v in (frontmatter or {}).items()) + "---\n"
-    content = fm + f"# {title}\n\n" + redact_sensitive(body).rstrip() + "\n"
+    b = redact_sensitive(body).lstrip()
+    if b.startswith("# "):
+        first, _, rest = b.partition("\n")
+        if first[2:].strip() == str(title).strip():
+            b = rest.lstrip("\n")
+    content = fm + f"# {title}\n\n" + b.rstrip() + "\n"
     _atomic_write(path, content)
     return path, "written"
 
@@ -421,6 +432,308 @@ def list_memory(mem_root=MEM_SCAN_ROOT, include_digested=False):
     return out
 
 
+# ── 原语：declare_agent / declare_agents（身份工厂） ─────────────────────
+
+AGENTGRAPH_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "agentgraph"))
+DECL_ROOT = os.path.normpath(os.path.join(AGENTGRAPH_DIR, "declarations"))
+AGENT_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
+
+DECL_TEMPLATE = """# {title}
+
+## 身份
+（待补充：这个身份是谁、擅长什么）
+
+## 运行规范
+- （待补充：视角、风格、约束）
+
+## 输出要求
+（待补充：默认输出格式）
+"""
+
+_TOOLS_CACHE = None
+_TOOLS_MOD = None
+
+
+def _tools_mod():
+    """agentgraph tools 模块（延迟加载；TOOLS 白名单唯一权威来源）。"""
+    global _TOOLS_MOD
+    if _TOOLS_MOD is None:
+        import importlib.util as _iu
+        path = os.path.join(AGENTGRAPH_DIR, "tools.py")
+        try:
+            spec = _iu.spec_from_file_location("agentgraph_tools", path)
+            mod = _iu.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _TOOLS_MOD = mod
+        except Exception as e:
+            raise RuntimeError(f"工具白名单加载失败（{path}）: {e}")
+    return _TOOLS_MOD
+
+
+def agent_tools():
+    """工具池白名单（TOOLS 注册表键列表；含声明式扩展工具；延迟加载）。
+
+    白名单是声明校验的唯一权威来源；加载失败 → 明确报错（fail-closed）。
+    """
+    global _TOOLS_CACHE
+    if _TOOLS_CACHE is None:
+        _TOOLS_CACHE = sorted(_tools_mod().TOOLS)
+    return _TOOLS_CACHE
+
+
+def declare_agent(name, description="", model="", tools=None, body="",
+                  force=False, decl_root=DECL_ROOT):
+    """写身份声明 declarations/<name>.md（生成态 → 固化态：一文件一身份）。
+
+    入参：
+      name        身份名（^[a-z0-9][a-z0-9-]{0,63}$，作文件名）
+      description 一句描述（frontmatter）
+      model       模型引用（空 = 运行时默认）
+      tools       工具白名单（list 或逗号串；须 ⊆ agentgraph TOOLS）
+      body        正文（空 = 模板骨架）
+      force       True 覆盖已存在文件（默认同名拒绝，幂等）
+    出参：(path, written|skipped)；校验失败抛 ValueError（批量调用方逐项收集）。
+    """
+    name = (name or "").strip()
+    if not AGENT_NAME.fullmatch(name):
+        raise ValueError(f"name 非法：{name!r}（只允许小写字母/数字/短横线，≤64 字符）")
+    if isinstance(tools, str):
+        tools = [t.strip() for t in tools.split(",") if t.strip()]
+    tools = list(tools or [])
+    if tools:
+        known = agent_tools()
+        bad = [t for t in tools if t not in known]
+        if bad:
+            raise ValueError(f"工具不在白名单：{bad}；可用：{known}")
+    path = os.path.join(decl_root, f"{name}.md")
+    if os.path.exists(path) and not force:
+        return path, "skipped"                      # 幂等：同名拒绝（编辑文件即可修改）
+    title = name.replace("-", " ").replace("_", " ").title()
+    body_text = (body or "").strip() or DECL_TEMPLATE.format(title=title).strip()
+    if not body_text.startswith("#"):
+        body_text = f"# {title}\n\n{body_text}"
+    fm = [f"name: {name}"]
+    if (description or "").strip():
+        fm.append("description: " + json.dumps(description.strip(), ensure_ascii=False))
+    if (model or "").strip():
+        fm.append("model: " + json.dumps(model.strip(), ensure_ascii=False))
+    if tools:
+        fm.append("tools: [" + ", ".join(tools) + "]")
+    os.makedirs(decl_root, exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write("---\n" + "\n".join(fm) + "\n---\n\n" + body_text + "\n")
+    os.replace(tmp, path)
+    return path, "written"
+
+
+def declare_agents(plan, force=False, decl_root=DECL_ROOT, behavior_dir=None):
+    """批量声明（身份工厂）：plan 为清单 JSON（文件路径 / JSON 文本 / 对象）。
+
+    清单形态：{"agents": [{name, description, model, tools, body}, ...]} 或裸数组。
+    逐项独立（幂等：同名 skipped；单项校验失败记 error，不中断整批）。
+    有效写入时追加一条行为记录（03-日志/行为记录）。
+    出参：{results: [{name, status, path, error?}], written, skipped, errors}
+    """
+    if isinstance(plan, str):
+        s = plan.strip()
+        if os.path.isfile(s):
+            with open(s, encoding="utf-8") as f:
+                plan = json.load(f)
+        else:
+            try:
+                plan = json.loads(s)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"plan 需为 JSON 文件路径或 JSON 文本：{e}")
+    items = plan.get("agents") if isinstance(plan, dict) else plan
+    if not isinstance(items, list) or not items:
+        raise ValueError("plan 需含非空 agents 列表（或为数组）")
+    results = []
+    for item in items:
+        if not isinstance(item, dict):
+            results.append({"name": None, "status": "error", "error": "清单项非对象"})
+            continue
+        try:
+            path, status = declare_agent(
+                item.get("name"), item.get("description", ""), item.get("model", ""),
+                item.get("tools"), item.get("body", ""),
+                force=force or bool(item.get("force")), decl_root=decl_root)
+            results.append({"name": item.get("name"), "status": status, "path": path})
+        except ValueError as e:
+            results.append({"name": item.get("name"), "status": "error", "error": str(e)})
+    report = {
+        "results": results,
+        "written": sum(1 for r in results if r["status"] == "written"),
+        "skipped": sum(1 for r in results if r["status"] == "skipped"),
+        "errors": sum(1 for r in results if r["status"] == "error"),
+    }
+    if report["written"] or report["errors"]:
+        names = ", ".join(r["name"] or "?" for r in results)
+        append_behavior_log("身份工厂",
+                            f"声明 {len(results)} 个身份：written={report['written']} "
+                            f"skipped={report['skipped']} errors={report['errors']} [{names}]",
+                            behavior_dir=behavior_dir or BEHAVIOR_DIR)
+    return report
+
+
+# ── 原语：register_tool（工具工厂） ─────────────────────────────────────
+
+TOOLS_REGISTRY = os.path.join(AGENTGRAPH_DIR, "tools_registry.yaml")
+_TOOL_NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")  # 与 agentgraph tools._slug_ok 一致
+
+
+def register_tool(entry, force=False, skip_smoke=False, registry_path=TOOLS_REGISTRY):
+    """注册扩展工具到 tools_registry.yaml（统一声明式接口，多 kind：http/script/plugin）。
+
+    入参：
+      entry  工具条目 dict：{name, kind, description, config{...}, smoke{args{...}}?}
+             kind=http 需 config.url（含 {参数} 占位）；script 需 config.script；plugin 需 config.path
+      force  同名覆盖（默认同名拒绝，幂等）
+    流程：校验 →（有 smoke 时）契约自检（构建+样例调用，成功文本为准，ERROR: 即失败）
+          → 追加落盘（LF，原子写）；工具名进 TOOLS 白名单（消费面自动生效，新进程加载）
+    出参：(path, registered|skipped)；任何校验/smoke 失败抛 ValueError（不落盘）。
+    """
+    global _TOOLS_CACHE, _TOOLS_MOD
+    import yaml
+    if not isinstance(entry, dict):
+        raise ValueError("entry 需为 dict")
+    name = str(entry.get("name") or "").strip()
+    if not _TOOL_NAME.fullmatch(name):
+        raise ValueError(f"工具名非法：{name!r}（小写字母/数字/下划线/短横线，≤64）")
+    kind = str(entry.get("kind") or "").strip().lower()
+    if kind == "mcp":
+        raise ValueError("kind=mcp 桥接为 V1.1（暂未实现）")
+    if kind not in ("http", "script", "plugin"):
+        raise ValueError(f"kind 需为 http/script/plugin（got {kind!r}）")
+    cfg = entry.get("config") or {}
+    need = {"http": "url", "script": "script", "plugin": "path"}[kind]
+    if not str(cfg.get(need) or "").strip():
+        raise ValueError(f"kind={kind} 需 config.{need}")
+    with open(registry_path, encoding="utf-8") as f:
+        doc = yaml.safe_load(f) or {}
+    tools = [t for t in (doc.get("tools") or []) if isinstance(t, dict)]
+    if any(str(t.get("name")) == name for t in tools) and not force:
+        return registry_path, "skipped"          # 幂等：同名拒绝
+    # smoke 自检（条目声明了 smoke 即触发；构建走与加载同一路径）
+    if "smoke" in entry and not skip_smoke:
+        tool_obj = _tools_mod().build_tool(entry)
+        smoke_args = (entry.get("smoke") or {}).get("args") or {}
+        try:
+            result = tool_obj.invoke(smoke_args)
+        except Exception as e:
+            raise ValueError(f"smoke 自检异常：{e}")
+        if not isinstance(result, str) or result.startswith("ERROR:"):
+            raise ValueError(f"smoke 自检失败（契约=成功返回内容文本）：{str(result)[:200]}")
+    tools = [t for t in tools if str(t.get("name")) != name]
+    tools.append(entry)
+    doc["tools"] = tools
+    os.makedirs(os.path.dirname(registry_path), exist_ok=True)
+    tmp = registry_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        yaml.safe_dump(doc, f, allow_unicode=True, sort_keys=False)
+    os.replace(tmp, registry_path)
+    # 同进程刷新：注册后白名单立即生效（跨进程场景靠新加载，此为兜底）
+    _TOOLS_CACHE = None
+    _TOOLS_MOD = None
+    return registry_path, "registered"
+
+
+# ── 原语：tool_inventory（工具工厂·本地源盘点） ─────────────────────────
+
+OP_SKILLS = _paths.SKILLS_ROOT
+
+
+def tool_inventory(tasks_root=None, scripts_root=None, skills_root=OP_SKILLS):
+    """盘点本地可包装为工具的现成来源（工具工厂·源搜索之本地支）。
+
+    出参：{tools: [{name, description}], scripts: [相对路径], tasks: [文件名], skills: [名]}
+    纯读操作；用于源搜索前避免重造（对齐"本地优先"）。
+    """
+    tasks_root = tasks_root or os.path.join(AGENTGRAPH_DIR, "..", "tasks")
+    scripts_root = scripts_root or os.path.dirname(os.path.abspath(__file__))
+    tools = []
+    try:
+        for t in _tools_mod().TOOLS.values():
+            tools.append({"name": t.name, "description": (t.description or "")[:120]})
+    except Exception:
+        pass
+    def _files(root, pat="_"):
+        try:
+            return sorted(f for f in os.listdir(root) if f.endswith(".py"))
+        except Exception:
+            return []
+    skills = []
+    try:
+        skills = sorted(d for d in os.listdir(skills_root)
+                        if os.path.isdir(os.path.join(skills_root, d)))
+    except Exception:
+        pass
+    return {
+        "tools": tools,
+        "tasks": _files(tasks_root),
+        "scripts": _files(scripts_root),
+        "skills": skills,
+    }
+
+
+# ── 原语：工具草案（工具工厂·草案落盘 / 采纳闭环） ─────────────────────
+
+DRAFTS_DIR = os.path.join(AGENTGRAPH_DIR, "drafts")
+
+
+def save_tool_drafts(drafts, drafts_dir=DRAFTS_DIR):
+    """工具草案落盘（工具工厂）：drafts = register_tool 条目列表（scout 产出）。
+
+    每个草案写 <drafts_dir>/<name>.tool.json（{drafted_at, entry}，临时文件原子替换）；
+    同名跳过（幂等，不覆盖已有草案）。
+    出参：{saved: [路径], skipped: [名], errors: [{name, error}]}
+    """
+    if not isinstance(drafts, list) or not drafts:
+        raise ValueError("drafts 需为非空列表（register_tool 条目）")
+    os.makedirs(drafts_dir, exist_ok=True)
+    saved, skipped, errors = [], [], []
+    for entry in drafts:
+        name = str((entry or {}).get("name") or "").strip() if isinstance(entry, dict) else ""
+        if not _TOOL_NAME.fullmatch(name):
+            errors.append({"name": name or None, "error": "草案缺合法 name（或非对象）"})
+            continue
+        path = os.path.join(drafts_dir, f"{name}.tool.json")
+        if os.path.exists(path):
+            skipped.append(name)
+            continue
+        payload = {"drafted_at": datetime.now().isoformat(timespec="seconds"), "entry": entry}
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+        saved.append(path)
+    return {"saved": saved, "skipped": skipped, "errors": errors}
+
+
+def adopt_tool_draft(path, force=False, registry_path=TOOLS_REGISTRY):
+    """采纳工具草案（工具工厂）：读草案 → register_tool（校验+smoke）→ 草案改名 *.adopted.json。
+
+    入参：path = 草案文件（<name>.tool.json，格式 {entry: {...}}）
+    出参：{registry, status: registered|skipped, draft: 采纳后路径}；
+    校验/smoke 失败抛 ValueError（草案保持原样，不落盘）。
+    """
+    if not os.path.isfile(path):
+        raise ValueError(f"草案文件不存在：{path}")
+    with open(path, encoding="utf-8") as f:
+        doc = json.load(f)
+    entry = doc.get("entry") if isinstance(doc, dict) else None
+    if not isinstance(entry, dict):
+        raise ValueError(f"草案格式需为 {{entry: ...}}：{path}")
+    registry_path, status = register_tool(entry, force=force, registry_path=registry_path)
+    adopted = path
+    if path.endswith(".tool.json"):
+        adopted = path[: -len(".tool.json")] + ".adopted.json"
+    if adopted != path:
+        os.replace(path, adopted)
+    return {"registry": registry_path, "status": status, "draft": adopted}
+
+
 # ── CLI 自检（ponytail：非平凡逻辑留一个可运行检查） ───────────────────
 
 def _self_check():
@@ -479,7 +792,77 @@ def _self_check():
     assert supersede_page("主题A", "学习", "", "主题B", kb_root=kp)[1] == "skipped", "falsify 幂等"
     lm = list_memory(mem_root=tmp)
     assert isinstance(lm, list), "list_memory"
-    print("OK: primitives 自检通过（write_kb_page/write_memory/mark_digested/行为/digest 日志/锚点/skill/permission/四分支/list_memory）")
+    # 身份工厂原语
+    dr = os.path.join(tmp, "decl")
+    dp, dst = declare_agent("tmp-checker", "测试身份", "m/x", ["vault_search"],
+                            "", decl_root=dr)
+    assert dst == "written" and os.path.isfile(dp), f"declare_agent: {dp} {dst}"
+    text = open(dp, encoding="utf-8").read()
+    assert "name: tmp-checker" in text and "tools: [vault_search]" in text, "declare 落盘"
+    assert declare_agent("tmp-checker", decl_root=dr)[1] == "skipped", "declare 幂等"
+    assert declare_agent("tmp-checker", force=True, decl_root=dr)[1] == "written", "declare force"
+    try:
+        declare_agent("Bad Name", decl_root=dr)
+        raise AssertionError("非法 name 未拦截")
+    except ValueError:
+        pass
+    try:
+        declare_agent("tmp-checker2", tools=["nope"], decl_root=dr)
+        raise AssertionError("越权工具未拦截")
+    except ValueError:
+        pass
+    rp = declare_agents(
+        {"agents": [{"name": "tmp-checker"}, {"name": "Bad Name"},
+                    {"name": "tmp-checker", "force": True}]}, decl_root=dr,
+        behavior_dir=os.path.join(tmp, "行为记录"))
+    assert rp["skipped"] == 1 and rp["errors"] == 1 and rp["written"] == 1, f"declare_agents: {rp}"
+    pl = os.path.join(tmp, "plan.json")
+    open(pl, "w", encoding="utf-8").write('{"agents": [{"name": "tmp-plan-a"}]}')
+    assert declare_agents(pl, decl_root=dr, behavior_dir=os.path.join(tmp, "行为记录"))["written"] == 1, "declare_agents 文件输入"
+    # 工具工厂原语
+    tr = os.path.join(tmp, "tools.yaml")
+    open(tr, "w", encoding="utf-8").write("tools: []\n")
+    ts = os.path.join(tmp, "echo_tool.py")
+    open(ts, "w", encoding="utf-8").write("import sys\nprint('ECHO:' + sys.argv[1])\n")
+    tp, tst = register_tool({"name": "tmp-echo", "kind": "script", "description": "测试脚本工具",
+                             "config": {"script": ts, "args": ["{q}"], "params": ["q"]},
+                             "smoke": {"args": {"q": "hi"}}}, registry_path=tr)
+    assert tst == "registered" and os.path.isfile(tp), f"register_tool: {tp} {tst}"
+    assert register_tool({"name": "tmp-echo", "kind": "script",
+                          "config": {"script": ts}}, registry_path=tr)[1] == "skipped", "register_tool 幂等"
+    tb = os.path.join(tmp, "bad_tool.py")
+    open(tb, "w", encoding="utf-8").write("print('ERROR: nope')\n")
+    try:
+        register_tool({"name": "tmp-bad", "kind": "script",
+                       "config": {"script": tb}, "smoke": {"args": {}}}, registry_path=tr)
+        raise AssertionError("smoke 失败未拦截")
+    except ValueError:
+        pass
+    try:
+        register_tool({"name": "tmp-x", "kind": "mcp", "config": {}}, registry_path=tr)
+        raise AssertionError("mcp 未拦截")
+    except ValueError:
+        pass
+    import yaml as _yaml
+    reg = _yaml.safe_load(open(tr, encoding="utf-8"))
+    assert len(reg.get("tools") or []) == 1, "注册表落盘"
+    inv = tool_inventory()
+    assert isinstance(inv, dict) and inv.get("tools"), f"tool_inventory: {inv}"
+    # 工具草案（落盘/采纳闭环）
+    dd = os.path.join(tmp, "drafts")
+    sd = save_tool_drafts([
+        {"name": "tmp-draft-a", "kind": "script", "description": "d",
+         "config": {"script": ts, "args": ["{q}"], "params": ["q"]},
+         "smoke": {"args": {"q": "hi"}}},
+        {"name": "Bad Name"},
+        {"name": "tmp-draft-a", "kind": "script", "description": "dup"},
+    ], drafts_dir=dd)
+    assert len(sd["saved"]) == 1 and sd["skipped"] == ["tmp-draft-a"] and len(sd["errors"]) == 1, \
+        f"save_tool_drafts: {sd}"
+    ad = adopt_tool_draft(sd["saved"][0], registry_path=tr)
+    assert ad["status"] == "registered" and ad["draft"].endswith(".adopted.json") \
+        and os.path.isfile(ad["draft"]) and not os.path.isfile(sd["saved"][0]), f"adopt: {ad}"
+    print("OK: primitives 自检通过（write_kb_page/write_memory/mark_digested/行为/digest 日志/锚点/skill/permission/四分支/list_memory/身份声明/工具注册/源盘点/工具草案）")
 
 
 def _cli():
@@ -504,6 +887,13 @@ def _cli():
         "list_memory": list_memory,
         "mark_digested": mark_digested,
         "write_memory_page": write_memory_page,
+        "declare_agent": declare_agent,
+        "declare_agents": declare_agents,
+        "register_tool": register_tool,
+        "save_tool_drafts": save_tool_drafts,
+        "adopt_tool_draft": adopt_tool_draft,
+        "tool_inventory": tool_inventory,
+        "agent_tools": agent_tools,
     }.get(name)
     if fn is None:
         print(f"未知原语: {name}", file=sys.stderr)
@@ -512,6 +902,9 @@ def _cli():
         result = fn(**args)
     except TypeError as e:
         print(f"原语 {name} 参数错误: {e}", file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"原语 {name} 校验失败: {e}", file=sys.stderr)
         return 1
     print(json.dumps(result, ensure_ascii=False))
     return 0

@@ -25,6 +25,10 @@ from embedders import load_config, make_embedder
 from rerank import make_reranker
 import paths as _paths
 
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
 INDEX_BASE = _paths.INDEX_DIR
 BEHAVIOR_DIR = _paths.BEHAVIOR_DIR
 
@@ -137,7 +141,8 @@ def main():
             m = meta[i]
             results.append({"path": m["path"], "title": m["title"],
                             "skeleton": m["skeleton"],
-                            "score": round(1.0 / (rank + 1), 4)})
+                            "score": round(1.0 / (rank + 1), 4),
+                            "snippet": " ".join((texts[i] or "")[:280].split())})
     dt = (time.time() - t0) * 1000
 
     if args.json:
