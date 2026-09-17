@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python-static:
+    name: Python 语法与 YAML 检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 语法检查（compileall）
+        run: python -m compileall -q l2-memory
+      - name: YAML 解析检查
+        run: |
+          pip install pyyaml
+          python - <<'PY'
+          import glob, sys, yaml
+          bad = 0
+          for p in glob.glob("l2-memory/**/*.yaml", recursive=True) + glob.glob("l2-memory/**/*.yml", recursive=True):
+              try:
+                  yaml.safe_load(open(p, encoding="utf-8"))
+              except Exception as e:  # noqa: BLE001
+                  print(f"YAML 解析失败: {p}: {e}")
+                  bad += 1
+          print("YAML OK" if not bad else f"{bad} 个文件失败")
+          sys.exit(1 if bad else 0)
+          PY
+
+  dashboard:
+    name: Dashboard 构建
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: 安装依赖
+        run: npm --prefix l4-os/dashboard install --no-audit --no-fund
+      - name: 构建（tsc + vite）
+        run: npm --prefix l4-os/dashboard run build
+
+  shell:
+    name: 壳构建
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: 构建 AiosShell
+        run: dotnet build l4-os/shell/AiosShell/AiosShell.csproj -c Release
